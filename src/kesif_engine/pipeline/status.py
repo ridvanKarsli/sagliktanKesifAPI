@@ -34,6 +34,7 @@ def status(disease: str) -> dict:
         "fetch": wd / "corpus_index.json",
         "drugs": chembl.dictionary_path(),
         "labels": wd / "labels.json",
+        "evidence": wd / "evidence_external.json",
         "rank": rd / "candidates.csv",
         "backtest": rd / "backtest.json",
         "novelty": rd / "candidates_novelty.csv",
@@ -62,7 +63,19 @@ def status(disease: str) -> dict:
         "has_backtest": (rd / "backtest.json").exists(),
         "has_report": (rd / "report.html").exists(),
         "has_discovery": (rd / "discovery.json").exists(),
+        "has_evidence": (wd / "evidence_external.json").exists(),
         "last_job": json.loads((rd / "last_job.json").read_text(encoding="utf-8")) if (rd / "last_job.json").exists() else None,
         "steps": st,
         "settings": load_settings(disease).to_dict(),
+        "confidence": _confidence(disease),
     }
+
+
+def _confidence(disease: str) -> dict:
+    from kesif_engine.pipeline.steps import method_confidence  # döngüsel içe aktarmayı önlemek için geç yükleme
+
+    try:
+        return method_confidence(disease)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Güven notu hesaplanamadı: %s", exc)
+        return {"grade": "ölçülemedi", "reasons": [], "numbers": {}}

@@ -17,6 +17,7 @@ import json
 import math
 from collections import Counter, defaultdict
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
@@ -35,13 +36,13 @@ def _nan(v):
     return v is None or (isinstance(v, float) and math.isnan(v))
 
 
-def justify(row: dict, links: list, disease_label: str) -> str:
+def justify(row: Dict[str, Any], links: list, disease_label: str) -> str:
     """Bir aday için kural tabanlı gerekçe paragrafı."""
     name = row["chemical"]
-    phase = row.get("max_phase")
+    phase: Any = row.get("max_phase")
     phase_txt = f"klinik faz {float(phase):.0f}" if not _nan(phase) and phase != "" else "faz bilgisi yok"
-    pm = row.get("pubmed_direct")
-    ct = row.get("clinical_trials")
+    pm: Any = row.get("pubmed_direct")
+    ct: Any = row.get("clinical_trials")
     if not _nan(pm) and int(pm) > 0:
         first = f"{name} ({phase_txt}) incelenen {disease_label} makale örneğinde hiç anılmamış; PubMed'in tamamında hastalıkla {int(pm)} makalede birlikte geçiyor."
     else:
@@ -49,8 +50,13 @@ def justify(row: dict, links: list, disease_label: str) -> str:
     if not _nan(ct) and int(ct) > 0:
         first += f" ClinicalTrials.gov'da bu hastalık için {int(ct)} çalışma kaydı var: yöntem bu ilacı görmeden buldu."
     parts = [first]
-    seen_genes = set()
-    lit = [l for l in links if l.get("source") == "literature" and not (l["gene"] in seen_genes or seen_genes.add(l["gene"]))][:3]
+    lit = []
+    seen_genes: set = set()
+    for l in links:
+        if l.get("source") == "literature" and l["gene"] not in seen_genes:
+            seen_genes.add(l["gene"])
+            lit.append(l)
+    lit = lit[:3]
     mech = [l for l in links if l.get("source") == "chembl"][:2]
     for l in lit:
         parts.append(
@@ -66,6 +72,13 @@ def justify(row: dict, links: list, disease_label: str) -> str:
             f"{' (' + m['moa'] + ')' if m.get('moa') else ''}; gen hastalıkta {TR_DIR.get(m.get('gene_direction'), 'yönü bilinmiyor')}"
             f" (yön: {TR_CONS.get(m.get('consistency'), 'bilinmiyor')})."
         )
+    gt, nt = row.get("genetic_target"), row.get("network_target")
+    if isinstance(gt, str) and gt:
+        sym, val = gt.rsplit(" ", 1)
+        parts.append(f"Literatürden bağımsız genetik kanıt: hedefi {sym} hastalıkla genetik ilişkili (skor {val}).")
+    if isinstance(nt, str) and nt:
+        sym, val = nt.rsplit(" ", 1)
+        parts.append(f"Protein ağında hedefi {sym} hastalık genlerine rastgele beklenenden yakın ({val.replace('z=', 'z = ')}).")
     harm = row.get("harm_signal") or "yok"
     if harm == "yok":
         parts.append("Hastalıkla doğrudan ilişki raporu yok; güvenlik sinyali değerlendirilemedi.")
@@ -78,7 +91,7 @@ def justify(row: dict, links: list, disease_label: str) -> str:
     return " ".join(parts)
 
 
-def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new: int = 20) -> dict:
+def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new: int = 20, confidence: Optional[dict] = None) -> dict:
     cand = _read_csv(results_dir / "candidates.csv")
     if cand.empty:
         return {}
@@ -141,6 +154,8 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
             "mechanism": r.get("mechanism") if isinstance(r.get("mechanism"), str) else "",
             "clinical_trials": None if _nan(r.get("clinical_trials")) else int(r["clinical_trials"]),
             "pubmed_direct": None if _nan(r.get("pubmed_direct")) else int(r["pubmed_direct"]),
+            "genetic_target": r.get("genetic_target") if isinstance(r.get("genetic_target"), str) else "",
+            "network_target": r.get("network_target") if isinstance(r.get("network_target"), str) else "",
             "justification": justify(r.to_dict(), links, disease_cfg.get("label", "hastalık")),
         })
 
@@ -153,16 +168,20 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
             classes[top["gene"]].append(r["chemical"])
     target_classes = sorted(({"gene": g, "n": len(v), "drugs": v[:6]} for g, v in classes.items()), key=lambda x: -x["n"])[:10]
 
-    bt_summary = {}
+    bt_summary: Dict[str, Any] = {}
     if bt and bt.get("schemes"):
         for s, res in bt["schemes"].items():
             m = res.get("metrics")
             if m:
-                bt_summary[s] = {"n_positives": res.get("n_positives"), "n_universe": res.get("n_universe"),
-                                 "method_at_10": m["method"]["hits_at_10"], "frequency_at_10": m["frequency"]["hits_at_10"],
-                                 "method_at_25": m["method"]["hits_at_25"], "frequency_at_25": m["frequency"]["hits_at_25"],
+                used = "fused" if "fused" in m else "method"  # listede kullanılan sıralama
+                bt_summary[s] = {"n_positives": res.get("n_positives"), "n_universe": res.get("n_universe"), "ranking": used,
+                                 "method_at_10": m[used]["hits_at_10"], "frequency_at_10": m["frequency"]["hits_at_10"],
+                                 "method_at_25": m[used]["hits_at_25"], "frequency_at_25": m["frequency"]["hits_at_25"],
+                                 "base_at_10": m["method"]["hits_at_10"],
                                  "random_at_10": (res.get("random_expected_hits") or {}).get("at_10"),
-                                 "auc_method": m["method"]["auc"], "auc_frequency": m["frequency"]["auc"]}
+                                 "auc_method": m[used]["auc"], "auc_frequency": m["frequency"]["auc"],
+                                 "ap_method": m[used].get("ap"), "ap_frequency": m["frequency"].get("ap"),
+                                 "ap_random": res.get("random_expected_ap")}
         bt_summary["cutoff_year"] = bt.get("cutoff_year")
         bt_summary["dropped_bridges"] = [d[1] for d in bt.get("dropped_bridges", [])][:12]
 
@@ -189,6 +208,8 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
         "target_classes": target_classes,
         "backtest": bt_summary,
         "verdict": _verdict(len(checked), len(with_trials), enrichment, bt_summary),
+        "confidence": confidence or {"grade": "ölçülemedi", "reasons": [], "numbers": {}},
+        "fusion": cand["fusion"].iloc[0] if "fusion" in cand.columns and len(cand) else "base",
     }
     (results_dir / "discovery.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1), encoding="utf-8")
     return summary
@@ -229,6 +250,7 @@ def compare_row(key: str, label: str, s: dict) -> dict:
         "enrichment": s.get("enrichment"),
         "trials_at_10": f"{tr.get('method_at_10')} / {tr.get('frequency_at_10')}" if tr else "–",
         "top_classes": [f"{c['gene']} ({c['n']})" for c in s.get("target_classes", [])[:3]],
+        "confidence": (s.get("confidence") or {}).get("grade", "ölçülemedi"),
         "built_at": s.get("built_at"),
     }
 

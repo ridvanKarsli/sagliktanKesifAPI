@@ -1,0 +1,258 @@
+[
+ {
+  "key": "behcet",
+  "label": "Behçet hastalığı",
+  "name_en": "Behcet Syndrome",
+  "mesh_id": "MESH:D001528",
+  "pubmed_query": "\"Behcet Syndrome\"[MeSH Terms] OR Behcet*[Title/Abstract]",
+  "hold_out": false
+ },
+ {
+  "key": "fmf",
+  "label": "Ailesel Akdeniz ateşi",
+  "name_en": "Familial Mediterranean Fever",
+  "mesh_id": "MESH:D010505",
+  "pubmed_query": "\"Familial Mediterranean Fever\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "retinitis-pigmentosa",
+  "label": "Retinitis pigmentosa",
+  "name_en": "Retinitis Pigmentosa",
+  "mesh_id": "MESH:D012174",
+  "pubmed_query": "\"Retinitis Pigmentosa\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "rheumatoid-arthritis",
+  "label": "Romatoid artrit",
+  "name_en": "Arthritis, Rheumatoid",
+  "mesh_id": "MESH:D001172",
+  "pubmed_query": "\"Arthritis, Rheumatoid\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "psoriasis",
+  "label": "Sedef hastalığı",
+  "name_en": "Psoriasis",
+  "mesh_id": "MESH:D011565",
+  "pubmed_query": "\"Psoriasis\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "crohn",
+  "label": "Crohn hastalığı",
+  "name_en": "Crohn Disease",
+  "mesh_id": "MESH:D003424",
+  "pubmed_query": "\"Crohn Disease\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "ulcerative-colitis",
+  "label": "Ülseratif kolit",
+  "name_en": "Colitis, Ulcerative",
+  "mesh_id": "MESH:D003093",
+  "pubmed_query": "\"Colitis, Ulcerative\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "sle",
+  "label": "Sistemik lupus eritematozus",
+  "name_en": "Lupus Erythematosus, Systemic",
+  "mesh_id": "MESH:D008180",
+  "pubmed_query": "\"Lupus Erythematosus, Systemic\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "multiple-sclerosis",
+  "label": "Multipl skleroz",
+  "name_en": "Multiple Sclerosis",
+  "mesh_id": "MESH:D009103",
+  "pubmed_query": "\"Multiple Sclerosis\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "asthma",
+  "label": "Astım",
+  "name_en": "Asthma",
+  "mesh_id": "MESH:D001249",
+  "pubmed_query": "\"Asthma\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "type2-diabetes",
+  "label": "Tip 2 diyabet",
+  "name_en": "Diabetes Mellitus, Type 2",
+  "mesh_id": "MESH:D003924",
+  "pubmed_query": "\"Diabetes Mellitus, Type 2\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "hypertension",
+  "label": "Hipertansiyon",
+  "name_en": "Hypertension",
+  "mesh_id": "MESH:D006973",
+  "pubmed_query": "\"Hypertension\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "heart-failure",
+  "label": "Kalp yetersizliği",
+  "name_en": "Heart Failure",
+  "mesh_id": "MESH:D006333",
+  "pubmed_query": "\"Heart Failure\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "alzheimer",
+  "label": "Alzheimer hastalığı",
+  "name_en": "Alzheimer Disease",
+  "mesh_id": "MESH:D000544",
+  "pubmed_query": "\"Alzheimer Disease\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "parkinson",
+  "label": "Parkinson hastalığı",
+  "name_en": "Parkinson Disease",
+  "mesh_id": "MESH:D010300",
+  "pubmed_query": "\"Parkinson Disease\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "als",
+  "label": "Amiyotrofik lateral skleroz",
+  "name_en": "Amyotrophic Lateral Sclerosis",
+  "mesh_id": "MESH:D000690",
+  "pubmed_query": "\"Amyotrophic Lateral Sclerosis\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "huntington",
+  "label": "Huntington hastalığı",
+  "name_en": "Huntington Disease",
+  "mesh_id": "MESH:D006816",
+  "pubmed_query": "\"Huntington Disease\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "cystic-fibrosis",
+  "label": "Kistik fibrozis",
+  "name_en": "Cystic Fibrosis",
+  "mesh_id": "MESH:D003550",
+  "pubmed_query": "\"Cystic Fibrosis\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "ipf",
+  "label": "İdiyopatik pulmoner fibrozis",
+  "name_en": "Idiopathic Pulmonary Fibrosis",
+  "mesh_id": "MESH:D054990",
+  "pubmed_query": "\"Idiopathic Pulmonary Fibrosis\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "systemic-sclerosis",
+  "label": "Sistemik skleroz",
+  "name_en": "Scleroderma, Systemic",
+  "mesh_id": "MESH:D012595",
+  "pubmed_query": "\"Scleroderma, Systemic\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "ankylosing-spondylitis",
+  "label": "Ankilozan spondilit",
+  "name_en": "Spondylitis, Ankylosing",
+  "mesh_id": "MESH:D013167",
+  "pubmed_query": "\"Spondylitis, Ankylosing\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "atopic-dermatitis",
+  "label": "Atopik dermatit",
+  "name_en": "Dermatitis, Atopic",
+  "mesh_id": "MESH:D003876",
+  "pubmed_query": "\"Dermatitis, Atopic\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "sjogren",
+  "label": "Sjögren sendromu",
+  "name_en": "Sjogren's Syndrome",
+  "mesh_id": "MESH:D012859",
+  "pubmed_query": "\"Sjogren's Syndrome\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "dmd",
+  "label": "Duchenne kas distrofisi",
+  "name_en": "Muscular Dystrophy, Duchenne",
+  "mesh_id": "MESH:D020388",
+  "pubmed_query": "\"Muscular Dystrophy, Duchenne\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "amd",
+  "label": "Yaşa bağlı makula dejenerasyonu",
+  "name_en": "Macular Degeneration",
+  "mesh_id": "MESH:D008268",
+  "pubmed_query": "\"Macular Degeneration\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "nafld",
+  "label": "Alkole bağlı olmayan yağlı karaciğer",
+  "name_en": "Non-alcoholic Fatty Liver Disease",
+  "mesh_id": "MESH:D065626",
+  "pubmed_query": "\"Non-alcoholic Fatty Liver Disease\"[MeSH Terms]",
+  "hold_out": false
+ },
+ {
+  "key": "gout",
+  "label": "Gut",
+  "name_en": "Gout",
+  "mesh_id": "MESH:D006073",
+  "pubmed_query": "\"Gout\"[MeSH Terms]",
+  "hold_out": true
+ },
+ {
+  "key": "myasthenia-gravis",
+  "label": "Miyastenia gravis",
+  "name_en": "Myasthenia Gravis",
+  "mesh_id": "MESH:D009157",
+  "pubmed_query": "\"Myasthenia Gravis\"[MeSH Terms]",
+  "hold_out": true
+ },
+ {
+  "key": "hidradenitis",
+  "label": "Hidradenitis süpürativa",
+  "name_en": "Hidradenitis Suppurativa",
+  "mesh_id": "MESH:D017497",
+  "pubmed_query": "\"Hidradenitis Suppurativa\"[MeSH Terms]",
+  "hold_out": true
+ },
+ {
+  "key": "sarcoidosis",
+  "label": "Sarkoidoz",
+  "name_en": "Sarcoidosis",
+  "mesh_id": "MESH:D012507",
+  "pubmed_query": "\"Sarcoidosis\"[MeSH Terms]",
+  "hold_out": true
+ },
+ {
+  "key": "psoriatic-arthritis",
+  "label": "Psoriatik artrit",
+  "name_en": "Arthritis, Psoriatic",
+  "mesh_id": "MESH:D015535",
+  "pubmed_query": "\"Arthritis, Psoriatic\"[MeSH Terms]",
+  "hold_out": true
+ },
+ {
+  "key": "endometriosis",
+  "label": "Endometriozis",
+  "name_en": "Endometriosis",
+  "mesh_id": "MESH:D004715",
+  "pubmed_query": "\"Endometriosis\"[MeSH Terms]",
+  "hold_out": true
+ }
+]

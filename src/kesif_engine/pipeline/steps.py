@@ -1,4 +1,4 @@
-"""Analiz adımları ve sıralı çalıştırıcı: fetch → drugs → labels → tune → rank → backtest → novelty → report."""
+"""Analiz adımları ve sıralı çalıştırıcı: fetch → drugs → labels → evidence → tune → rank → backtest → novelty → report."""
 
 from __future__ import annotations
 
@@ -18,10 +18,12 @@ from kesif_engine.core.paths import resultsdir, workdir
 from kesif_engine.core.store import JsonlCache
 from kesif_engine.evaluation import labels
 from kesif_engine.evaluation.backtest import backtest
-from kesif_engine.insights import discovery, novelty
+from kesif_engine.insights import confidence, discovery, novelty
 from kesif_engine.pipeline.corpus import Corpus, _build_recs, _ensure
 from kesif_engine.pipeline.settings import load_settings, save_settings
 from kesif_engine.pipeline.status import _mark
+from kesif_engine.scoring import features as feature_table
+from kesif_engine.scoring import fusion
 from kesif_engine.scoring.ranking import Params, filter_specific, known_therapies, rank_candidates, select_bridges
 from kesif_engine.sources import chembl, genes, pubmed
 
@@ -47,7 +49,7 @@ def estimate(disease: str, start_year: int = 1990, max_a: int = MAX_ARTICLES_DEF
 PER_GENE_RECENT = 150  # her gen için ayrıca en yeni makaleler: yeni ajanlar (baxdrostat, retatrutide) ancak böyle görülür
 
 
-def step_fetch(disease: str, params: Params = None, start_year: int = 1990, max_a: int = MAX_ARTICLES_DEFAULT, per_gene: int = 300,
+def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 1990, max_a: int = MAX_ARTICLES_DEFAULT, per_gene: int = 300,
                per_gene_recent: int = PER_GENE_RECENT) -> dict:
     cfg = diseases.get(disease)
     p = params or load_settings(disease)
@@ -148,11 +150,17 @@ def step_labels(disease: str, force: bool = False, start_year: int = 1990) -> di
     return {"n_therapy": len(lab["therapy_pmids"]), "n_trials": len(lab["trials"])}
 
 
-def step_rank(disease: str, params: Params = None, corpus: Corpus = None) -> pd.DataFrame:
+def step_rank(disease: str, params: Optional[Params] = None, corpus: Optional[Corpus] = None) -> pd.DataFrame:
     corpus = corpus or Corpus(disease)
     p = params or load_settings(disease)
     corpus.ensure_gene_counts()
     ranked, evidence = rank_candidates(corpus.a, corpus.c, params=p, therapy_pmids=corpus.therapy_pmids, **corpus.kwargs())
+    # Kanal tablosu ve ölçümle doğrulanmış birleştirme (geriye dönük testte ölçülenle aynı fonksiyonlar)
+    decision = fusion.current_decision()
+    feats = feature_table.build(ranked, corpus.a, corpus.c_records, corpus.drugs, corpus.drug_map, corpus.external)
+    ranked = fusion.apply_to_candidates(ranked, feats, decision, corpus.drug_map, bool(corpus.drugs))
+    ranked = feature_table.annotate_external(ranked, corpus.drugs, corpus.drug_map, corpus.external)
+    log.info("Birleştirme: %s (%s)", decision.get("method"), decision.get("origin"))
     out = resultsdir(disease)
     ranked.to_csv(out / "candidates.csv", encoding="utf-8")
     (out / "evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -168,16 +176,18 @@ def step_rank(disease: str, params: Params = None, corpus: Corpus = None) -> pd.
         old = set(pd.read_csv(nov)["chemical_id"])
         if not old <= set(ranked["chemical_id"]):
             nov.unlink()
-    _mark(disease, "rank", n_candidates=len(ranked), params=p.to_dict())
+    _mark(disease, "rank", n_candidates=len(ranked), params=p.to_dict(),
+          fusion={k: decision.get(k) for k in ("method", "channels", "verdict", "origin", "reason")})
     log.info("%d aday yazıldı: %s", len(ranked), out / "candidates.csv")
     return ranked
 
 
-def step_backtest(disease: str, cutoff: int = 2018, params: Params = None, corpus: Corpus = None) -> dict:
+def step_backtest(disease: str, cutoff: int = 2018, params: Optional[Params] = None, corpus: Optional[Corpus] = None) -> dict:
     corpus = corpus or Corpus(disease)
     p = params or load_settings(disease)
     corpus.ensure_gene_counts()
-    result = backtest(corpus.a, corpus.c, cutoff, labels=corpus.labels, params=p, **corpus.kwargs())
+    result = backtest(corpus.a, corpus.c, cutoff, labels=corpus.labels, params=p, external=corpus.external,
+                      fusion_decision=fusion.current_decision(), **corpus.kwargs())
     out = resultsdir(disease)
     (out / "backtest.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     hist_path = out / "backtest_history.json"
@@ -203,11 +213,24 @@ def step_discovery(disease: str) -> dict:
     """Keşif özeti: yeni adaylar, bağımsız doğrulama, hedef sınıfları (results/<hastalık>/discovery.json)."""
     cfg = dict(diseases.get(disease))
     cfg["key"] = disease
-    summary = discovery.build_summary(resultsdir(disease), workdir(disease), cfg)
+    summary = discovery.build_summary(resultsdir(disease), workdir(disease), cfg, confidence=method_confidence(disease))
     if summary:
         log.info("Keşif özeti: %d yeni aday, %d'i kontrol edildi, %d'inin klinik çalışması var",
                  summary["n_new"], summary["n_new_checked"], summary["n_new_with_trials"])
     return summary
+
+
+def method_confidence(disease: str) -> dict:
+    """Bu hastalıkta yönteme güven notu (insights/confidence.py)."""
+    wd, rd = workdir(disease), resultsdir(disease)
+
+    def _read(path):
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+    index = _read(wd / "corpus_index.json") or {}
+    return confidence.grade(_read(rd / "backtest.json"), _read(wd / "benchmark_ref.json"),
+                            n_articles=len(index.get("a_pmids", [])) if index else None,
+                            external=_read(wd / "evidence_external.json"))
 
 
 def step_report(disease: str, top: int = 100) -> Path:
@@ -219,7 +242,7 @@ def step_report(disease: str, top: int = 100) -> Path:
     return path
 
 
-def step_tune(disease: str, cutoff_a: int = 2016, cutoff_b: int = 2019, apply: bool = True, corpus: Corpus = None) -> dict:
+def step_tune(disease: str, cutoff_a: int = 2016, cutoff_b: int = 2019, apply: bool = True, corpus: Optional[Corpus] = None) -> dict:
     from kesif_engine.evaluation.tuning import tune
 
     corpus = corpus or Corpus(disease)
@@ -235,11 +258,11 @@ def step_tune(disease: str, cutoff_a: int = 2016, cutoff_b: int = 2019, apply: b
     return result
 
 
-STEP_ORDER = ["fetch", "drugs", "labels", "tune", "rank", "backtest", "novelty", "report"]
-DEFAULT_STEPS = ["fetch", "drugs", "labels", "rank", "backtest", "novelty", "report"]
+STEP_ORDER = ["fetch", "drugs", "labels", "evidence", "tune", "rank", "backtest", "novelty", "report"]
+DEFAULT_STEPS = ["fetch", "drugs", "labels", "evidence", "rank", "backtest", "novelty", "report"]
 
 
-def run_steps(disease: str, steps: list, params: Params = None, cutoff: int = 2018, top: int = 100,
+def run_steps(disease: str, steps: list, params: Optional[Params] = None, cutoff: int = 2018, top: int = 100,
               fetch_opts: Optional[dict] = None, force: bool = False) -> dict:
     """Seçilen adımları sırayla çalıştırır; her adımın özetini döndürür."""
     p = params or load_settings(disease)
@@ -265,6 +288,16 @@ def run_steps(disease: str, steps: list, params: Params = None, cutoff: int = 20
                 summary[step] = step_labels(disease, force=force)
             except Exception as exc:  # noqa: BLE001
                 log.warning("Doğrulama etiketleri alınamadı (%s); mevcut etiketlerle devam ediliyor.", exc)
+                summary[step] = {"error": f"{type(exc).__name__}: {exc}", "skipped": True}
+            corpus = None
+        elif step == "evidence":
+            # Bağımsız kanıt isteğe bağlı bir kanaldır: servisler yanıt vermezse analiz bu kanal olmadan sürer.
+            from kesif_engine.pipeline.evidence import step_evidence
+
+            try:
+                summary[step] = step_evidence(disease)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Bağımsız kanıt adımı tamamlanamadı (%s); literatür kanallarıyla devam ediliyor.", exc)
                 summary[step] = {"error": f"{type(exc).__name__}: {exc}", "skipped": True}
             corpus = None
         elif step == "tune":

@@ -146,7 +146,12 @@ def build_report(results_dir: Path, disease_cfg: dict, top_n: int = 50) -> Path:
             for c in d.get("new_candidates", [])[:15]
         )
         classes = ", ".join(f"{html.escape(c['gene'])} ({c['n']})" for c in d.get("target_classes", [])[:6])
-        disc_html = (
+        conf = d.get("confidence") or {}
+        conf_html = ""
+        if conf.get("grade"):
+            reasons = " ".join(html.escape(r) for r in conf.get("reasons", []))
+            conf_html = f'<div class="box"><b>Bu hastalıkta yönteme güven: {html.escape(conf["grade"])}.</b> <small>{reasons}</small></div>'
+        disc_html = conf_html + (
             f'<div class="box"><b>Keşif özeti.</b> {html.escape(d.get("verdict", ""))}'
             + (f"<br><small>Öne çıkan hedef sınıfları: {classes}</small>" if classes else "")
             + f'<ol style="margin:8px 0 0;padding-left:20px">{items}</ol></div>'
