@@ -1,0 +1,14 @@
+{
+  "behcet": {
+    "label": "Behçet hastalığı",
+    "name_en": "Behcet Syndrome",
+    "mesh_id": "MESH:D001528",
+    "pubmed_query": "\"Behcet Syndrome\"[MeSH Terms] OR Behcet*[Title/Abstract]"
+  },
+  "fmf": {
+    "label": "Ailesel Akdeniz ateşi",
+    "name_en": "Familial Mediterranean Fever",
+    "mesh_id": "MESH:D010505",
+    "pubmed_query": "\"Familial Mediterranean Fever\"[MeSH Terms] OR \"familial mediterranean fever\"[Title/Abstract]"
+  }
+}

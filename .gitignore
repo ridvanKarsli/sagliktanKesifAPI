@@ -1,0 +1,25 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# yerel veritabanı ve ortam (kalıcı veri veritabanında, gizler .env'de)
+*.db
+.env
+
+# eski kurulumdan kalan veri klasörleri (import-legacy sonrası gerekmez)
+data/
+results/
+_restore*/
+
+# sistem / editör
+.DS_Store
+.idea/
+.vscode/
