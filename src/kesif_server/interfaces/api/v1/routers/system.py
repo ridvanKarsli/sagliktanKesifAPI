@@ -36,6 +36,12 @@ def compare(_: User = Depends(current_user), c: Container = Depends(get_containe
     return c.results.compare()
 
 
+@router.get("/benchmark")
+def benchmark(_: User = Depends(current_user), c: Container = Depends(get_container)):
+    """Yöntem karnesi: hastalık × kesit ölçümü, yöntemlerin güven aralıkları ve kullanılan birleştirme kararı."""
+    return c.results.benchmark()
+
+
 @router.get("/drugs/{chembl_id}/indications")
 def drug_indications(chembl_id: str, _: User = Depends(current_user), c: Container = Depends(get_container)):
     return c.external.indications(chembl_id)

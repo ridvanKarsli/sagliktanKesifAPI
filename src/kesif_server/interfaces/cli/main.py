@@ -7,6 +7,8 @@
   kesif run <hastalık>     analizi bu süreçte çalıştır (kuyruksuz; sunucu/işçi gerekmez)
   kesif import-legacy      eski dosya tabanlı kurulumdan hastalık/aday verisini veritabanına al
   kesif doctor             dış veri kaynaklarını denetle
+  kesif benchmark          çok hastalıklı yöntem karnesi; birleştirme kararını ölçümle verir
+  kesif panel              ölçüm paneli hastalıklarını listele / kataloğa ekle
 """
 
 from __future__ import annotations
@@ -176,6 +178,74 @@ def doctor():
         typer.echo(f"{'✓' if r['ok'] else '✗'} {r['name']:<28} {r['ms']:>6} ms  {r['detail']}")
     if not ok:
         sys.exit(1)
+
+
+@app.command()
+def benchmark(diseases: Optional[List[str]] = typer.Option(None, "--disease", "-d", help="Yalnızca bu hastalıklar (varsayılan: derlemi hazır olanların hepsi)"),
+              apply: bool = typer.Option(True, help="Ölçüm sonucu birleştirme kararını kaydet"),
+              rerank: bool = typer.Option(False, help="Karardan sonra ölçülen hastalıkları yeniden sırala")):
+    """Derlemi hazır hastalıkları 2012/2015/2018 kesitlerinde test eder; yöntemleri güven aralığıyla karşılaştırır ve
+    birleştirme kararını yalnızca ölçülen iyileşme anlamlıysa değiştirir. Sonuç veritabanına yazılır."""
+    import logging
+
+    from kesif_engine import pipeline
+
+    from ...container import get_container
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    c = get_container()
+    c.startup()
+    ws = c.workspace_impl
+    keys = diseases or [v.disease.key for v in c.list_diseases() if not v.disease.is_removed]
+    for key in keys:
+        ws.prepare(key)
+    ready = [k for k in pipeline.ready_diseases() if k in keys]
+    if not ready:
+        typer.echo("Derlemi ve doğrulama etiketi hazır hastalık yok; önce analiz çalıştırın.", err=True)
+        raise typer.Exit(2)
+    result = pipeline.step_benchmark(ready, apply=apply)
+    ws.save()
+    for key in ready:
+        ws.save(key)
+    sc = result["scorecard"]
+    typer.echo(f"\n{result['n_groups']} grup ({len(result['fit_diseases'])} hastalık × {len(result['cutoffs'])} kesit); hold-out: {', '.join(result['hold_out']) or 'yok'}")
+    for m in result["methods"] + ["frequency", "random"]:
+        ap = sc[m]["ap"]
+        extra = f"  fark {sc[m]['vs_base']['mean']:+.4f} [{sc[m]['vs_base']['lo']:+.4f}, {sc[m]['vs_base']['hi']:+.4f}]" if "vs_base" in sc[m] else ""
+        typer.echo(f"  {m:<10} AP {ap['mean']:.4f}  %90 GA [{ap['lo']:.4f}, {ap['hi']:.4f}]{extra}")
+    d = result["decision"]
+    typer.echo(f"\nKarar: {d.get('verdict')} → {d.get('method')}  ({d.get('reason')})")
+    if rerank and result.get("applied"):
+        for key in ready:
+            with c.uow() as uow:
+                params = uow.diseases.get(key).params or {}
+            c.rerank(c.local_actor(), key, params, None)
+            typer.echo(f"  yeniden sıralandı: {key}")
+
+
+@app.command()
+def panel(add: bool = typer.Option(False, "--add", help="Katalogda olmayan panel hastalıklarını ekle")):
+    """Ölçüm paneli: farklı hastalık türlerinden 32 hastalık (6'sı karara katılmayan hold-out)."""
+    from kesif_engine import pipeline
+
+    from ...container import get_container
+    from ...domain.entities import Disease
+
+    c = get_container()
+    c.startup()
+    added = 0
+    with c.uow() as uow:
+        for p in pipeline.load_panel():
+            exists = uow.diseases.get(p["key"])
+            mark = "hold-out" if p.get("hold_out") else ""
+            typer.echo(f"  {'✓' if exists else '·'} {p['key']:<24} {p['label']:<36} {mark}")
+            if add and not exists:
+                uow.diseases.add(Disease(key=p["key"], label=p["label"], name_en=p["name_en"], mesh_id=p["mesh_id"],
+                                         pubmed_query=p["pubmed_query"]))
+                added += 1
+        uow.commit()
+    if add:
+        typer.echo(f"{added} hastalık eklendi. Her biri için analiz çalıştırın (kesif run <anahtar>), sonra: kesif benchmark")
 
 
 if __name__ == "__main__":

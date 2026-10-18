@@ -42,12 +42,17 @@ class RunStatus(str, enum.Enum):
         return not self.is_active
 
 
+# Motorun ortak dizinleriyle (data/drugs, data/benchmark...) çakıştığı için hastalık anahtarı olamaz
+RESERVED_DISEASE_KEYS = frozenset({"drugs", "genes", "mesh", "benchmark"})
+
+
 class AnalysisStep(str, enum.Enum):
     """Analiz adımları; sıralama motorun çalıştırma sırasıdır."""
 
     FETCH = "fetch"        # makaleleri indir ve işaretle
     DRUGS = "drugs"        # ilaç sözlüğünü kur
     LABELS = "labels"      # doğrulama etiketleri (klinik çalışma kayıtları)
+    EVIDENCE = "evidence"  # literatürden bağımsız kanıt (genetik ilişki, protein ağı)
     TUNE = "tune"          # parametre ayarı
     RANK = "rank"          # aday sıralama
     BACKTEST = "backtest"  # geriye dönük doğrulama
@@ -60,7 +65,7 @@ class AnalysisStep(str, enum.Enum):
         return [s for s in cls if s in wanted]
 
 
-DEFAULT_STEPS = [AnalysisStep.FETCH, AnalysisStep.DRUGS, AnalysisStep.LABELS, AnalysisStep.RANK,
+DEFAULT_STEPS = [AnalysisStep.FETCH, AnalysisStep.DRUGS, AnalysisStep.LABELS, AnalysisStep.EVIDENCE, AnalysisStep.RANK,
                  AnalysisStep.BACKTEST, AnalysisStep.NOVELTY, AnalysisStep.REPORT]
 
 

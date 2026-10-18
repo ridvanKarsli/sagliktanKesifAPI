@@ -91,6 +91,9 @@ class FakeReader:
     def compare_row(self, key, label, summary):
         return {"key": key, "label": label, "n_new": summary.get("n_new")}
 
+    def default_fusion(self):
+        return {"method": "rrf", "channels": ["lit", "mech", "direct", "recent"], "origin": "paketle gelen ölçüm"}
+
     def report_html(self, key):
         return self._x(key, "report", None)
 

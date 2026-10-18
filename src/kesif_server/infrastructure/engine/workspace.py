@@ -3,6 +3,7 @@
 Motor dosya tabanlı koşar; kalıcı depo veritabanıdır. Düzen (çalışma dizinine göreli):
 
     data/drugs/*, data/genes/*, data/mesh/*      → scope "shared"   (ilaç/gen/hastalık sözlükleri, tüm hastalıklar ortak)
+    data/benchmark/*                             → scope "shared"   (yöntem karnesi ve birleştirme kararı)
     data/<hastalık>/*, results/<hastalık>/*     → scope "<hastalık>"
 
 `prepare` yalnızca sha256'sı farklı/eksik dosyaları indirir, `save` yalnızca değişenleri yükler; veritabanında olup yerelde
@@ -23,7 +24,7 @@ from ...domain.ports import UnitOfWorkFactory
 log = logging.getLogger(__name__)
 
 SHARED = "shared"
-SHARED_DIRS = ("data/drugs", "data/genes", "data/mesh")
+SHARED_DIRS = ("data/drugs", "data/genes", "data/mesh", "data/benchmark")
 SKIP_NAMES = {"job.log", ".DS_Store"}  # günlük veritabanında ayrıca tutulur (analysis_runs.log)
 
 

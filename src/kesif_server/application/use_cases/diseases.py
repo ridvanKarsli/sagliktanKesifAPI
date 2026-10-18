@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from ...domain.entities import AnalysisRun, ArtifactKind, Disease, Role, User
+from ...domain.entities import RESERVED_DISEASE_KEYS, AnalysisRun, ArtifactKind, Disease, Role, User
 from ...domain.errors import ConflictError, NotFoundError, ValidationError
 from ...domain.ports import DiseaseCatalog, UnitOfWorkFactory, WorkspaceSync
 from ..authorization import require
@@ -74,6 +74,8 @@ class AddDisease:
         if not name_en:
             raise ValidationError("İngilizce hastalık adı gerekli.")
         slug = self._catalog.slugify(key or name_en)
+        if slug in RESERVED_DISEASE_KEYS:
+            raise ValidationError(f"'{slug}' sistem tarafından kullanılan bir ad; başka bir anahtar seçin.", details={"key": slug})
         query = pubmed_query.strip() or self._catalog.build_query(mesh_term, name_en)
         with self._uow() as uow:
             existing = uow.diseases.get(slug)

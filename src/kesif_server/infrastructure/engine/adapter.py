@@ -189,6 +189,11 @@ class ResultReaderAdapter:
     def compare_row(self, key: str, label: str, summary: Dict[str, Any]) -> Dict[str, Any]:
         return _clean(discovery.compare_row(key, label, summary))
 
+    def default_fusion(self) -> Dict[str, Any]:
+        from kesif_engine.scoring import fusion
+
+        return {**fusion.default_decision(), "origin": "paketle gelen ölçüm"}
+
     def report_html(self, disease_key: str) -> Optional[str]:
         path = pipeline.resultsdir(disease_key) / "report.html"
         return path.read_text(encoding="utf-8") if path.exists() else None

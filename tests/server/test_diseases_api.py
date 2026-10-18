@@ -71,3 +71,27 @@ def test_catalog_not_ready(client, admin_headers):
     assert r.status_code == 409
     r = client.post("/api/v1/catalog/resolve", headers=admin_headers, json={"name": "x"})
     assert r.status_code == 422  # min_length
+
+
+def test_reserved_keys_cannot_become_diseases(client, admin_headers):
+    r = client.post("/api/v1/diseases", headers=admin_headers, json={"name_en": "Benchmark"})
+    assert r.status_code == 422 and "sistem" in r.json()["error"]["message"]
+
+
+def test_benchmark_falls_back_to_packaged_decision_then_reads_stored_scorecard(client, admin_headers, container):
+    import json
+
+    from kesif_server.domain.entities import StoredFile
+
+    r = client.get("/api/v1/benchmark", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["benchmark"] is None and r.json()["decision"]["origin"] == "paketle gelen ölçüm"
+
+    payload = {"n_groups": 9, "decision": {"method": "rrf", "verdict": "benimsendi"}}
+    with container.uow() as uow:
+        for path, body in (("data/benchmark/benchmark.json", payload), ("data/benchmark/fusion_model.json", payload["decision"])):
+            data = json.dumps(body).encode()
+            uow.files.put(StoredFile(path=path, scope="shared", sha256="x", size=len(data), content=data))
+        uow.commit()
+    r = client.get("/api/v1/benchmark", headers=admin_headers)
+    assert r.json()["benchmark"]["n_groups"] == 9 and r.json()["decision"]["verdict"] == "benimsendi"

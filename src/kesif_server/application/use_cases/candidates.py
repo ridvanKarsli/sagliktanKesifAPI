@@ -134,6 +134,20 @@ class ReadResults:
             w.writerow(r.to_row())
         return buf.getvalue()
 
+    def benchmark(self) -> Dict[str, Any]:
+        """Yöntem karnesi (çok hastalıklı ölçüm) ve geçerli birleştirme kararı; veritabanındaki ortak dosyalardan."""
+        import json
+
+        out: Dict[str, Any] = {"benchmark": None, "decision": None}
+        with self._uow() as uow:
+            for key, path in (("benchmark", "data/benchmark/benchmark.json"), ("decision", "data/benchmark/fusion_model.json")):
+                f = uow.files.get(path)
+                if f and f.content:
+                    out[key] = json.loads(f.content.decode("utf-8"))
+        if out["decision"] is None:
+            out["decision"] = self._reader.default_fusion()
+        return out
+
     def compare(self) -> List[Dict[str, Any]]:
         """Hastalıklar arası karşılaştırma: veritabanındaki keşif özetlerinden."""
         out = []
