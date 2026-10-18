@@ -30,17 +30,20 @@ içerir. Arayüz ayrı repodadır (Sağlıktan Keşif — Frontend) ve bu API'ye
 ```
 src/
 ├── kesif_engine/        Bilimsel çekirdek (algoritma ve doğruluk). Saf Python + pandas. Web/DB bilmez.
-│   ├── pipeline/            orkestrasyon: steps (fetch → drugs → labels → tune → rank → backtest → novelty → report),
-│   │                        corpus (derlem kurma), status, settings, results — dışarıya açık kapı
-│   ├── insights/            novelty (yenilik kontrolü) · discovery (keşif özeti) · report
+│   ├── pipeline/            orkestrasyon: steps (fetch → drugs → labels → evidence → tune → rank → backtest → novelty →
+│   │                        report), evidence (bağımsız kanıt), benchmark (yöntem karnesi), corpus, status, settings,
+│   │                        results — dışarıya açık kapı
+│   ├── insights/            novelty (yenilik kontrolü) · discovery (keşif özeti) · confidence (yöntem güveni) · report
 │   ├── health.py            dış veri kaynaklarının sağlık kontrolü
 │   ├── evaluation/          labels (doğrulama etiketleri) · backtest (geriye dönük test) · tuning (parametre ayarı)
-│   ├── scoring/             ranking (puan formülü, köprü gen, özgüllük, yön) · drugspace (ilaç sınıfları)
+│   │                        benchmark (çok hastalık × çok kesit ölçümü, güven aralığı, birleştirme kararı)
+│   ├── scoring/             ranking (literatür köprüsü, özgüllük, yön) · features (kanıt kanalları) · fusion (kanal
+│   │                        birleştirme) · network (protein ağında yakınlık) · drugspace (ilaç sınıfları)
 │   ├── catalog/             diseases (hastalık tanımları) · mesh (hastalık sözlüğü)
 │   ├── extraction/          drugmap (kimyasal → ilaç) · textmatch (metinden biyolojik ilaç taraması)
-│   ├── sources/             pubmed · pubtator · chembl · genes · clinicaltrials (dış veri istemcileri)
+│   ├── sources/             pubmed · pubtator · chembl · genes · clinicaltrials · opentargets · string_ppi
 │   ├── core/                config (ayarlar, kelime listeleri) · net (HTTP) · store (önbellek) · paths (dizin düzeni)
-│   └── resources/           pakete gömülü varsayılan hastalık kataloğu
+│   └── resources/           varsayılan hastalık kataloğu · ölçüm paneli · paketle gelen birleştirme kararı
 └── kesif_server/        Uygulama. Bağımlılık yönü daima içeri: interfaces → application → domain ← infrastructure
     ├── domain/              entities.py (User, Disease, AnalysisRun, Candidate…), errors.py, ports.py (Protocol'ler)
     ├── application/         use_cases/ (diseases, analyses, candidates, catalog, auth), authorization.py
@@ -57,6 +60,42 @@ Motorun katmanları da tek yönlüdür: `core → sources → catalog / extracti
 Bir modül yalnızca kendi katmanından ya da altından içe aktarabilir ve motor sunucuyu hiç içe aktarmaz;
 `tests/engine/test_architecture.py` bunu her test çalıştırmasında denetler. Doğruluk ve keşif kalitesiyle ilgili her
 değişiklik `scoring/` ve `evaluation/` içinde yapılır.
+
+## Algoritma
+
+Motor tek bir puan formülü değil, ayrı ayrı ölçülebilen **kanıt kanallarıdır**; kanalların nasıl birleştirileceğine
+geriye dönük ölçüm karar verir. Hiçbir aşamada dil modeli ya da kararı dışarıya bırakan bir bileşen yoktur: aynı veri
+her zaman aynı sıralamayı verir (`tests/engine/test_determinism.py`).
+
+| Kanal | Ne ölçer | Kaynak |
+|---|---|---|
+| `lit` | hastalık → köprü gen → ilaç dolaylı bağı (Swanson ABC, lift ve bağlam ağırlıklı) | makaleler |
+| `mech` | ilacın bilinen hedefi köprü genlerden biri mi | ilaç veritabanı |
+| `direct`, `recent` | ilacın hastalık literatüründe doğrudan ve son 5 yılda anılması | makaleler |
+| `genetic` | ilaç hedefinin hastalıkla genetik ilişkisi (bilinen ilaç ve literatür kanıtı **dışlanır**) | Open Targets |
+| `biology` | hayvan modeli, gen ifadesi, yolak kanıtı | Open Targets |
+| `network` | hedefin protein ağında hastalık genlerine yakınlığı: RWR + iki yönlü derece eşlemeli z-skoru (metin madenciliği kenarları **dışlanır**) | STRING |
+
+Birleştirme seçenekleri ve seçim kuralı (`evaluation/benchmark.py`):
+
+- **Temel yöntem:** literatür köprüsü + mekanizma, zarar cezasıyla.
+- **Kanal birleştirme (RRF, Cormack 2009):** her kanaldaki sıranın `1/(60+sıra)` toplamı; ölçekten bağımsız, eğitim gerektirmez.
+- **Öğrenen birleştirme:** kanıt kanallarının katsayısı negatif olamayan, açıklanabilir lojistik model; yalnızca
+  eğitimde görmediği hastalıkta ölçülür (hastalık dışarıda bırakılarak).
+- Seçim: her hastalık 2012, 2015 ve 2018 kesitlerinde test edilir; bir yöntem temel yöntemi eşleştirilmiş farkın %90
+  güven aralığıyla geçmedikçe benimsenmez. Paneldeki kontrol hastalıkları karara katılmaz, sonradan raporlanır.
+
+Geliştirme ölçümü (Behçet, ailesel Akdeniz ateşi, retinitis pigmentosa; 9 test; klinik çalışma etiketi; ortalama AP):
+kanal birleştirme **0,195**, temel yöntem 0,174 (fark %90 GA [0,003; 0,038]), öğrenen model 0,167, sıklık sıralaması
+0,096, rastgele 0,009. Bu yüzden paketle gelen karar kanal birleştirmedir; kurulum `kesif benchmark` çalıştırdığında
+kendi ölçümü bunun yerini alır. Genetik ve ağ kanalları birleştirmeye ancak ölçümde katkıları gösterilirse girer.
+
+Değerlendirilip alınmayanlar: graf sinir ağları (TxGNN gibi; GPU, açıklanamayan karar ve tekrarlanabilirlik sorunu),
+gen ifadesi imza eşleştirme (CMap/LINCS; lisans ve hastalık başına imza gerekliliği).
+
+**Yöntem güveni** (`insights/confidence.py`): her hastalık için ölçüme dayalı not — yüksek / orta / düşük / ölçülemedi.
+Rastgeleye oran, sıklık sıralamasına göre durum, ilk 25'teki isabet ve örnek sayısından kural tabanlı türetilir;
+arayüzde ve raporda gerekçeleriyle gösterilir (ör. retinitis pigmentosa'da "düşük": listenin başında doğrulanan ilaç yok).
 
 İlkeler:
 
@@ -131,6 +170,8 @@ Roller: `viewer` okur · `analyst` hastalık ekler, analiz başlatır, parametre
 | `kesif create-admin <e-posta>` | yönetici aç |
 | `kesif import-legacy <klasör>` | eski kurulumu al |
 | `kesif doctor` | dış veri kaynaklarını denetle |
+| `kesif benchmark` | derlemi hazır hastalıklarda yöntem karnesi; birleştirme kararını ölçümle günceller |
+| `kesif panel --add` | 32 hastalıklık ölçüm panelini kataloğa ekle (6'sı karara katılmayan kontrol) |
 
 ## Test ve kalite
 
