@@ -106,6 +106,7 @@ def fetch_trials(client: HttpClient, condition: str) -> list:
                     raise
         else:
             data = _ct_page(client, condition, fields, token)
+        data = data or {}
         trials.extend(parse_trials(data))
         token = data.get("nextPageToken")
         if not token:

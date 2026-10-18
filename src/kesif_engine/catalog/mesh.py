@@ -15,6 +15,7 @@ import logging
 import re
 import unicodedata
 from pathlib import Path
+from typing import Optional
 
 from kesif_engine.core import config
 from kesif_engine.core.net import HttpClient
@@ -153,7 +154,7 @@ def build_from_sparql(client: HttpClient) -> list:
     return list(items.values())
 
 
-def build(client: HttpClient = None, progress=None) -> dict:
+def build(client: Optional[HttpClient] = None, progress=None) -> dict:
     """progress: aşama metni alan isteğe bağlı geri çağırma (arayüzde gösterilir)."""
     client = client or HttpClient()
     report = progress or (lambda stage: None)
@@ -234,7 +235,7 @@ def search(query: str, limit: int = 12) -> list:
         hits = sum(1 for t in toks if t in hay)
         if hits == 0:
             continue
-        score = hits * 10
+        score: float = hits * 10
         if it["_norm"].startswith(toks[0]):
             score += 6
         elif any(part.startswith(toks[0]) for part in hay.split(" | ")):

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from kesif_engine.core import config
 
@@ -30,7 +30,7 @@ def is_new_small_molecule(d: dict, this_year: Optional[int] = None) -> bool:
         return False
     this_year = this_year or datetime.date.today().year
     phase = d.get("max_phase", -1) or 0
-    approved = d.get("first_approval")
+    approved: Any = d.get("first_approval")
     if phase >= 4:
         return bool(approved) and int(approved) >= this_year - NEW_SMALL_MOLECULE_YEARS
     return phase >= 1

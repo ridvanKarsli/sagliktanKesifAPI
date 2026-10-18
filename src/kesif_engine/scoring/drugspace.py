@@ -81,7 +81,7 @@ def classify(drug: dict, label: str = "", gene_names: Optional[set] = None) -> s
 
     if name_main & config.DIAGNOSTIC_NAMES or name_main & config.STOP_CHEMICALS:
         return KIND_DIAGNOSTIC
-    if _atc_excluded(drug.get("atc")):
+    if _atc_excluded(drug.get("atc") or []):
         return KIND_DIAGNOSTIC
     if name_main & config.ENDOGENOUS:
         return KIND_ENDOGENOUS

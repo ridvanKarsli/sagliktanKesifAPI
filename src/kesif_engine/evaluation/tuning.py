@@ -11,7 +11,7 @@ import datetime
 import itertools
 import logging
 import math
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from kesif_engine.evaluation.backtest import backtest
 from kesif_engine.scoring.ranking import Params
@@ -47,7 +47,7 @@ def tune(corpus, base: Params, cutoff_a: int = 2016, cutoff_b: int = 2019, grid:
     grid = grid or GRID
     keys = list(grid)
     kwargs = corpus.kwargs()
-    rows = []
+    rows: List[Dict[str, Any]] = []
     log.info("Parametre ayarı: kesit A=%d üzerinde %d kombinasyon", cutoff_a, math.prod(len(v) for v in grid.values()))
     for combo in itertools.product(*(grid[k] for k in keys)):
         p = Params.from_dict({**base.to_dict(), **dict(zip(keys, combo))})

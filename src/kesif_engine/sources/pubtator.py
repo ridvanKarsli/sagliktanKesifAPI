@@ -107,7 +107,7 @@ def _doc_to_record(pmid: str, doc: dict) -> dict:
     for passage in doc.get("passages", []):
         for ann in passage.get("annotations", []):
             infons = ann.get("infons", {}) or {}
-            bucket = BUCKETS.get(infons.get("type"))
+            bucket = BUCKETS.get(str(infons.get("type") or ""))
             ident = infons.get("identifier") or infons.get("Identifier")
             if not bucket or not ident:
                 continue

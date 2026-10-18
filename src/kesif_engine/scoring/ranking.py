@@ -467,7 +467,7 @@ def rank_candidates(
     drug_map: Optional[dict] = None,
     gene_info: Optional[dict] = None,
     disease_id: Optional[str] = None,
-    params: Params = None,
+    params: Optional[Params] = None,
     gene_counts: Optional[dict] = None,
     therapy_pmids=None,
     hereditary: bool = False,
@@ -491,7 +491,7 @@ def rank_candidates(
     use_dict = bool(drugs)
 
     b_all = select_bridges(a_records, p)
-    b_all, dropped = filter_specific(b_all, len(a_records), gene_counts, p.min_spec)
+    b_all, dropped = filter_specific(b_all, len(a_records), gene_counts or {}, p.min_spec)
     b_items = [(g, lab, n) for g, lab, n, _ in b_all]
     if c_by_gene:
         # yalnızca literatürü indirilmiş köprüler puanlanabilir (fetch sonrası eklenen komşular atlanır)
@@ -508,7 +508,8 @@ def rank_candidates(
 
     def species_of(gid: str) -> str:
         tax = (gene_info.get(gid) or {}).get("taxid")
-        return {9606: "insan", 10090: "fare", 10116: "sıçan"}.get(tax, "diğer tür" if tax else "")
+        names = {9606: "insan", 10090: "fare", 10116: "sıçan"}
+        return names.get(int(tax), "diğer tür") if tax else ""
 
     ab_pmids: dict = defaultdict(list)
     direct: dict = defaultdict(list)
@@ -555,7 +556,7 @@ def rank_candidates(
     links: dict = defaultdict(list)
     n_ab_of = {gid: n for gid, _, n in b_items}
     glabel_of = {gid: label for gid, label, _ in b_items}
-    spec_of = {gid: specificity(n, len(a_records), gene_counts, gid) for gid, _, n in b_items}
+    spec_of = {gid: specificity(n, len(a_records), gene_counts or {}, gid) for gid, _, n in b_items}
     ctx = context_set(a_records, list(c_unique.values()), disease_id) if p.ctx_floor < 1.0 else set()
     harm = drug_disease_relations(a_records, disease_id)
 
@@ -658,8 +659,13 @@ def rank_candidates(
     for key, cids in groups.items():
         lit_links = sorted((l for c in cids for l in links.get(c, [])), key=lambda x: -x["contribution"])
         m_links = [l for c in cids for l in mech_links.get(c, [])]
-        seen_m = set()
-        m_links = [l for l in m_links if not (l["gene_id"] in seen_m or seen_m.add(l["gene_id"]))]
+        seen_m: set = set()
+        unique_m = []
+        for l in m_links:
+            if l["gene_id"] not in seen_m:
+                seen_m.add(l["gene_id"])
+                unique_m.append(l)
+        m_links = unique_m
         if len(lit_links) < p.min_links and not m_links:
             continue
         # Ana kimlik: en yüksek puanlı; eşitlikte makale işaretlemesinden gelen kimlik (MeSH) metin taramasına (CHEMBL:) tercih edilir
@@ -676,10 +682,10 @@ def rank_candidates(
         mech_desc = "; ".join(f"{l['action_type'].lower()} {l['gene']}" for l in m_links[:3])
         direct_pmids = sorted({pm for c in cids for pm in direct.get(c, [])})
         n_therapy = len({pm for c in cids for pm in therapy_direct.get(c, set())})
-        rel: Counter = Counter()
+        harm_rel: Counter = Counter()
         for c in cids:
-            rel.update(harm.get(c, {}))
-        harm_sig = harm_label(rel)
+            harm_rel.update(harm.get(c, {}))
+        harm_sig = harm_label(harm_rel)
         penalty = 1.0
         if p.harm_penalty < 1.0:
             if harm_sig == "tetikleme sinyali":
@@ -689,7 +695,7 @@ def rank_candidates(
         lit_total = sum(lit[c] for c in cids)
         mech_total = max((mech[c] for c in cids), default=0.0)
         kind = drugspace.classify(drug, label, gene_names) if use_dict else kind_of(main)
-        if rel[NEG] >= 2 or n_therapy >= 3:
+        if harm_rel[NEG] >= 2 or n_therapy >= 3:
             status = "tedavi olarak çalışılmış"
         elif direct_pmids:
             status = "literatürde anılmış"
@@ -709,8 +715,8 @@ def rank_candidates(
                 "penalty": round(penalty, 2),
                 "direction": summarize_direction(l["consistency"] for l in all_links),
                 "harm_signal": harm_sig,
-                "n_treat_rel": rel[NEG],
-                "n_harm_rel": rel[POS],
+                "n_treat_rel": harm_rel[NEG],
+                "n_harm_rel": harm_rel[POS],
                 "n_bridges": len(lit_links),
                 "mechanism": mech_desc,
                 "n_direct_a": len(direct_pmids),

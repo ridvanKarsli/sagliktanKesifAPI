@@ -164,9 +164,10 @@ def fetch_indications(client: HttpClient, chembl_id: str) -> list:
         if term:
             items.append({"term": term, "phase": _phase(ind.get("max_phase_for_ind"))})
     seen, out = set(), []
-    for it in sorted(items, key=lambda x: -x["phase"]):
-        if it["term"].lower() not in seen:
-            seen.add(it["term"].lower())
+    for it in sorted(items, key=lambda x: -float(x["phase"])):
+        term = str(it["term"]).lower()
+        if term not in seen:
+            seen.add(term)
             out.append(it)
     cache[chembl_id] = out[:12]
     path.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
