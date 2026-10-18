@@ -63,4 +63,4 @@ def test_services_checks_report_failures_without_raising():
             raise ConnectionError("offline")
 
     out = health.check_all(Dead())
-    assert len(out) == 5 and not any(r["ok"] for r in out) and all("ConnectionError" in r["detail"] for r in out)
+    assert len(out) == len(health.CHECKS) and not any(r["ok"] for r in out) and all("ConnectionError" in r["detail"] for r in out)

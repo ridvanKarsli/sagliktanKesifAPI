@@ -1,7 +1,7 @@
 """Dış veri kaynaklarının sağlık kontrolü: her servise küçük, gerçek bir istek atılır ve yanıt biçimi doğrulanır.
 
 Neden: Ekim 2026'da iki kez iş yarıda kaldı — PubTator çok yeni PMID'li grubu reddetti, ClinicalTrials.gov yeni
-alan adlarını kabul etmedi. Bu kontrol, bir analize başlamadan ya da canlıda her gece, dört servisin hem erişilebilir
+alan adlarını kabul etmedi. Bu kontrol, bir analize başlamadan ya da canlıda her gece, her servisin hem erişilebilir
 hem de beklenen biçimde yanıt verdiğini gösterir. Komut satırı: `kesif doctor`; arayüz: ana sayfadaki düğme;
 API: GET /api/health/services.
 """
@@ -9,9 +9,10 @@ API: GET /api/health/services.
 from __future__ import annotations
 
 import time
+from typing import Optional
 
 from kesif_engine.core.net import HttpClient
-from kesif_engine.sources import chembl, clinicaltrials, genes, pubmed, pubtator
+from kesif_engine.sources import chembl, clinicaltrials, genes, opentargets, pubmed, pubtator, string_ppi
 
 KNOWN_PMID = "29097191"   # voretigene neparvovec (RP) — PubTator'da işaretli
 KNOWN_GENE = "7124"       # TNF
@@ -68,6 +69,28 @@ def check_clinicaltrials(client: HttpClient):
     return f"klinik çalışma kayıtları çalışıyor ({len(trials)} kayıt, {with_arms} tanesinde tasarım/kol bilgisi)"
 
 
+def check_opentargets(client: HttpClient):
+    hit = opentargets.find_disease(client, "Behcet Syndrome", "MESH:D001528")
+    if not hit:
+        raise RuntimeError("hastalık araması boş döndü")
+    data = opentargets._post(client, opentargets.ASSOC_QUERY, {"id": hit["id"], "index": 0, "size": 25})
+    rows = (((data.get("disease") or {}).get("associatedTargets")) or {}).get("rows") or []
+    parsed = opentargets.parse_rows(rows)
+    if not rows:
+        raise RuntimeError("ilişkili hedef listesi boş")
+    return f"genetik ilişki verisi çalışıyor ({hit['name']}, eşleşme: {hit['matched_by']}; ilk sayfada {len(parsed)} hedef)"
+
+
+def check_string(client: HttpClient):
+    resp = client.request("POST", f"{string_ppi.BASE}/network", data={
+        "identifiers": "TNF\rTNFRSF1A\rIL6", "species": string_ppi.SPECIES, "caller_identity": string_ppi.CALLER})
+    items = resp.json()
+    if not items or "escore" not in items[0]:
+        raise RuntimeError("beklenen kenar alanları (escore/dscore) yok")
+    edges = string_ppi.parse_edges(items, min_score=0.0)
+    return f"protein ağı çalışıyor ({len(edges)} kenar; yalnızca deneysel + veritabanı puanı kullanılıyor)"
+
+
 # Arayüzde kaynakların ticari/teknik adları gösterilmez (genel adlar); ayrıntı günlükte ve komut satırında.
 CHECKS = [
     ("pubmed", "Makale veritabanı", check_pubmed),
@@ -75,10 +98,12 @@ CHECKS = [
     ("pubtator_count", "Gen literatür sayımı", check_pubtator_count),
     ("chembl", "İlaç veritabanı", check_chembl),
     ("clinicaltrials", "Klinik çalışma kayıtları", check_clinicaltrials),
+    ("opentargets", "Genetik ilişki verisi", check_opentargets),
+    ("string", "Protein etkileşim ağı", check_string),
 ]
 
 
-def check_all(client: HttpClient = None) -> list:
+def check_all(client: Optional[HttpClient] = None) -> list:
     client = client or HttpClient(timeout=30, retries=1)
     out = []
     for key, name, fn in CHECKS:

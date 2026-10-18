@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from typing import Optional
 
 from kesif_engine.catalog import diseases, mesh
 from kesif_engine.core import config
@@ -60,7 +61,7 @@ def merge_orthologs(a_records, c_by_gene: dict, gene_info: dict) -> dict:
     görünüyordu. Sembol eşleşmesi (büyük/küçük harf duyarsız) ortolog için yeterli bir yaklaşıklıktır. Kayıtlar
     yerinde güncellenir; gen literatürü listeleri birleştirilir. Dönen: {model_gid: insan_gid}.
     """
-    human = {}
+    human: dict = {}
     for gid, info in gene_info.items():
         if (info or {}).get("taxid") == 9606 and info.get("symbol"):
             human.setdefault(info["symbol"].upper(), gid)
@@ -121,6 +122,8 @@ class Corpus:
         self.disease_id = self._detect_disease_id()
         self.hereditary = mesh.is_hereditary(self.disease_id) or mesh.is_hereditary(self.cfg.get("mesh_id", ""))
         self.labels = labels.load(wd / "labels.json")
+        ext_path = wd / "evidence_external.json"
+        self.external = json.loads(ext_path.read_text(encoding="utf-8")) if ext_path.exists() else {}
         if not self.labels:
             log.warning("Tedavi odaklı etiketler yok ('labels' adımı); backtest yalnızca 'mentions' şemasıyla çalışır.")
         if not any(r.relations for r in self.a):
@@ -167,7 +170,7 @@ class Corpus:
         if not counts:
             return self.cfg.get("mesh_id") or ""
         top = [d for d, _ in counts.most_common(3)]
-        configured = self.cfg.get("mesh_id")
+        configured = str(self.cfg.get("mesh_id") or "")
         if configured in top:
             return configured
         detected = top[0]
@@ -175,7 +178,7 @@ class Corpus:
             log.warning("Hastalık kimliği düzeltildi: yapılandırma %s, makalelerde %s (%d makale)", configured, detected, counts[detected])
         return detected
 
-    def ensure_gene_counts(self, client: HttpClient = None) -> dict:
+    def ensure_gene_counts(self, client: Optional[HttpClient] = None) -> dict:
         """Köprü genlerin arka plan sayılarını (özgüllük için) tamamlar; ağ yoksa eldekiyle devam eder."""
         p = load_settings(self.disease)
         if p.min_spec <= 0:
@@ -192,6 +195,12 @@ class Corpus:
             if still:
                 log.warning("%d köprü genin arka plan sayısı yok; bunlara özgüllük eşiği uygulanmadı.", len(still))
         return self.gene_counts
+
+    @property
+    def c_records(self) -> list:
+        """Köprü gen literatürünün tekrarsız birleşimi (PMID sırasıyla)."""
+        unique = {r.pmid: r for recs in self.c.values() for r in recs}
+        return [unique[k] for k in sorted(unique)]
 
     @property
     def therapy_pmids(self):
