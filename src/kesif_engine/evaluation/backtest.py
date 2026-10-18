@@ -7,18 +7,24 @@ Sıralama yalnızca kesit yılına kadarki makalelerle yapılır. Sonra üç ayr
   therapy  : kesitten sonra, "drug therapy" alt başlıklı hastalık makalelerinde ilk kez görülen ilaçlar
   trials   : kesitten sonra hastalık için ilk klinik çalışmaya giren ilaçlar (ClinicalTrials.gov)
 
-Her etiket için sıralamalar: method (lit+mech), lit_only, mech_only, frequency (kesit öncesi anılma sayısı).
-Yöntem frequency'yi geçmiyorsa öngörü gücü iddia edilemez.
+Her etiket için sıralamalar: method (mevcut yöntem puanı), her kanıt kanalı tek başına (lit_only, mech_only, direct,
+recent, genetic, biology, network), kanalların sıra birleştirmesi (rrf), verilmişse öğrenen birleştirme (fused) ve
+frequency (kesit öncesi anılma sayısı). Yöntem frequency'yi geçmiyorsa öngörü gücü iddia edilemez.
+
+Ölçütler: AUC, ilk 10/25/50'deki isabet ve ortalama kesinlik (AP; az pozitifte isabet sayısından daha kararlı).
+Not: genetik ve ağ kanalları kesit yılına göre dilimlenemez (bugünkü veridir); bu yüzden bu kanallarda ölçülen başarı
+hafif iyimser olabilir. Ağ kanalında metin madenciliği kenarları zaten kullanılmaz (bkz. scoring/network.py).
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pandas as pd
 
-from kesif_engine.scoring import drugspace
+from kesif_engine.scoring import drugspace, fusion
+from kesif_engine.scoring import features as feature_table
 from kesif_engine.scoring.ranking import Params, is_stop, pick_label, rank_candidates
 
 
@@ -39,20 +45,38 @@ def _split(records, cutoff: int):
     return before, after
 
 
+def _ordered(s: pd.Series) -> list:
+    """Puana göre azalan, eşitlikte anahtara göre (kararlı) sıra."""
+    return [k for k, _ in sorted(s.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
+def average_precision(s: pd.Series, positives: set) -> float:
+    """Ortalama kesinlik: her pozitifin bulunduğu sıradaki kesinliklerin ortalaması (puanı 0 olanlar sona)."""
+    if not positives:
+        return float("nan")
+    hits, total = 0, 0.0
+    for i, k in enumerate(_ordered(s), 1):
+        if k in positives:
+            hits += 1
+            total += hits / i
+    return total / len(positives)
+
+
 def _evaluate(rankings: dict, universe: list, positives: set, name: dict, future_count: Counter, ks) -> dict:
     uset = set(universe)
-    out = {"n_universe": len(universe), "n_positives": len(positives)}
+    out: Dict[str, Any] = {"n_universe": len(universe), "n_positives": len(positives)}
     if not positives or len(positives) >= len(universe):
         out["note"] = "Değerlendirme için yeterli pozitif örnek yok."
         return out
     out["metrics"] = {}
     for key, s in rankings.items():
         s = s[s.index.isin(uset)]
-        ordered = [c for c in s.sort_values(ascending=False).index if s[c] > 0]
-        m = {"auc": round(_auc(s, positives), 4)}
+        ordered = [c for c in _ordered(s) if s[c] > 0]
+        m = {"auc": round(_auc(s, positives), 4), "ap": round(average_precision(s, positives), 4)}
         for k in ks:
             m[f"hits_at_{k}"] = len(set(ordered[:k]) & positives)
         out["metrics"][key] = m
+    out["random_expected_ap"] = round(len(positives) / len(universe), 4)
     out["random_expected_hits"] = {f"at_{k}": round(min(k, len(universe)) * len(positives) / len(universe), 2) for k in ks}
     method = rankings["method"][rankings["method"].index.isin(uset)]
     freq = rankings["frequency"][rankings["frequency"].index.isin(uset)]
@@ -82,12 +106,18 @@ def backtest(
     gene_info: Optional[dict] = None,
     disease_id: Optional[str] = None,
     labels: Optional[dict] = None,
-    params: Params = None,
+    params: Optional[Params] = None,
     min_future: int = 2,
     ks=(10, 25, 50),
     gene_counts: Optional[dict] = None,
     hereditary: bool = False,
+    external: Optional[dict] = None,
+    fusion_decision: Optional[dict] = None,
+    return_features: bool = False,
 ) -> dict:
+    """external: genetik/ağ kanıtı (scoring.features); fusion_decision: değerlendirilecek birleştirme kararı.
+    return_features=True ise sonuçta '_features' (ilaç × kanal tablosu) ve '_labels' (şema → pozitif kümesi) döner;
+    benchmark öğrenen modeli bunlarla eğitir. Bu alanlar JSON'a yazılmamalıdır."""
     drugs = drugs or {}
     drug_map = drug_map or {}
     labels = labels or {}
@@ -152,21 +182,23 @@ def backtest(
 
     base_universe = [k for k in seen if in_space(k)]
 
-    def series(col: str) -> pd.Series:
-        s = pd.Series(0.0, index=base_universe)
-        if len(ranked):
-            for cid, val in zip(ranked["chemical_id"], ranked[col]):
-                k = key_of(cid)
-                if k in s.index:
-                    s[k] = max(float(s[k]), float(val))
-        return s
-
+    feats = feature_table.build(ranked, a_before, list(c_union.values()), drugs, drug_map, external,
+                                universe=base_universe, reference_year=cutoff)
+    channels = feature_table.available_channels(feats)
     rankings = {
-        "method": series("score"),
-        "lit_only": series("lit_score"),
-        "mech_only": series("mech_score"),
+        "method": feats["base"],
+        "lit_only": feats["lit"],
+        "mech_only": feats["mech"],
+        "direct": feats["direct"],
+        "recent": feats["recent"],
         "frequency": pd.Series({c: float(seen[c]) for c in base_universe}),
     }
+    for ch in ("genetic", "biology", "network"):
+        if ch in channels:
+            rankings[ch] = feats[ch]
+    rankings["rrf"] = fusion.rrf(feats, channels) * feats["penalty"]
+    if fusion_decision and fusion_decision.get("method") in ("logistic", "rrf"):
+        rankings["fused"] = fusion.fused_score(feats, fusion_decision)
 
     result = {
         "cutoff_year": cutoff,
@@ -178,13 +210,16 @@ def backtest(
         "n_excluded_endogenous": sum(1 for k in seen if kind.get(k) == drugspace.KIND_ENDOGENOUS),
         "n_excluded_diagnostic": sum(1 for k in seen if kind.get(k) == drugspace.KIND_DIAGNOSTIC),
         "dropped_bridges": ranked.attrs.get("dropped_bridges", []) if hasattr(ranked, "attrs") else [],
+        "channels": channels,
         "schemes": {},
     }
+    labels_out: dict = {}
 
     # 1) mentions: kesit sonrası hastalık literatüründe ilk kez anılanlar
     universe = [c for c in base_universe if c not in direct_before]
     positives = {c for c, n in mentions_after.items() if n >= min_future and c in set(universe)}
     result["schemes"]["mentions"] = _evaluate(rankings, universe, positives, name, mentions_after, ks)
+    labels_out["mentions"] = (universe, positives)
 
     # 2) therapy: "drug therapy" alt başlıklı makalelerde ilk kez görülenler
     therapy_pmids = set(labels.get("therapy_pmids") or [])
@@ -204,6 +239,7 @@ def backtest(
         positives = {c for c, n in th_after.items() if n >= min_future and c in uset}
         result["schemes"]["therapy"] = _evaluate(rankings, universe, positives, name, th_after, ks)
         result["schemes"]["therapy"]["n_therapy_articles_after"] = sum(1 for r in a_after if r.pmid in therapy_pmids)
+        labels_out["therapy"] = (universe, positives)
 
     # 3) trials: kesitten sonra hastalık için ilk klinik çalışmaya girenler
     first_trial = labels.get("first_trial_year") or {}
@@ -215,6 +251,7 @@ def backtest(
         after_count = Counter({c: 1 for c in positives})
         result["schemes"]["trials"] = _evaluate(rankings, universe, positives, name, after_count, ks)
         result["schemes"]["trials"]["n_drugs_with_any_trial"] = len(trial_year)
+        labels_out["trials"] = (universe, positives)
 
         # 4) trials_novel: en katı test. Kesit öncesi hastalık literatüründe HİÇ anılmamış ve kesitten sonra
         #    klinik çalışmaya girmiş ilaçlar (gerçek "keşif" ölçütü; örnek sayısı küçük olur).
@@ -224,6 +261,7 @@ def backtest(
             rankings, universe_n, positives_n, name, Counter({c: 1 for c in positives_n}), ks
         )
         result["schemes"]["trials_novel"]["positives_all"] = sorted(name[c] for c in positives_n)
+        labels_out["trials_novel"] = (universe_n, positives_n)
 
     # geriye uyumluluk: ana metrikler = en güvenilir mevcut şema
     primary = "trials" if "trials" in result["schemes"] else ("therapy" if "therapy" in result["schemes"] else "mentions")
@@ -232,4 +270,7 @@ def backtest(
         if key in result["schemes"][primary]:
             result[key] = result["schemes"][primary][key]
     result["n_future_in_universe"] = result.get("n_positives", 0)
+    if return_features:
+        result["_features"] = feats
+        result["_labels"] = labels_out
     return result
