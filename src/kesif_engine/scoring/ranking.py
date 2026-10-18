@@ -31,7 +31,8 @@ from typing import Optional
 
 import pandas as pd
 
-from . import config, drugspace
+from kesif_engine.core import config
+from kesif_engine.scoring import drugspace
 
 COLUMNS = [
     "chemical_id",
@@ -121,7 +122,7 @@ def _is_abbreviation(label: str) -> bool:
 
 def pick_label(votes: Counter) -> str:
     """En çok kullanılan yazımı seçer; kısaltma (MTX, CZP) varsa açık adı tercih eder."""
-    ordered = [label for label, _ in votes.most_common() if label]
+    ordered = [label for label, _ in sorted(votes.items(), key=lambda kv: (-kv[1], kv[0])) if label]  # eşitlikte alfabetik
     for label in ordered:
         if not _is_abbreviation(label):
             return label
@@ -281,7 +282,7 @@ def known_therapies(a_records, disease_id: Optional[str], drugs: Optional[dict] 
                 years[key].append(rec.year)
     gene_names = drugspace.gene_product_names(a_records)
     rows = []
-    for key in set(rel) | set(therapy_arts):
+    for key in sorted(set(rel) | set(therapy_arts)):  # sıralı: çıktı her çalıştırmada aynı
         c = rel[key]
         if drugs and key not in drugs:
             continue
@@ -313,7 +314,8 @@ def known_therapies(a_records, disease_id: Optional[str], drugs: Optional[dict] 
         return pd.DataFrame(columns=cols)
     out = pd.DataFrame(rows, columns=cols)
     out["_s"] = out["n_treat_rel"] + out["n_therapy_articles"]
-    out = out.sort_values(["_s", "n_articles"], ascending=False).drop(columns="_s").reset_index(drop=True)
+    out = out.sort_values(["_s", "n_articles", "chemical"], ascending=[False, False, True], kind="mergesort")
+    out = out.drop(columns="_s").reset_index(drop=True)
     out.index = out.index + 1
     out.index.name = "rank"
     return out
@@ -615,7 +617,7 @@ def rank_candidates(
             if not drug or cid not in votes or not eligible(cid):
                 continue
             for m in drug.get("mechanisms", []):
-                hit_gids = {symbol_to_gid[g.upper()] for g in m.get("genes", []) if g.upper() in symbol_to_gid}
+                hit_gids = sorted({symbol_to_gid[g.upper()] for g in m.get("genes", []) if g.upper() in symbol_to_gid})
                 for gid in hit_gids:
                     effect = _effect_from_action(m.get("action_type", ""))
                     gdir = gene_dir.get(gid, "unknown")
@@ -647,7 +649,7 @@ def rank_candidates(
 
     # Aynı ilacın birden fazla kimliğini (MeSH D/C kimliği, metin taraması CHEMBL kimliği) tek satırda birleştir.
     groups: dict = defaultdict(list)
-    for cid in set(lit) | set(mech):
+    for cid in sorted(set(lit) | set(mech)):  # sıralı: gruplama ve eşitlik çözümü her çalıştırmada aynı
         key = drug_map.get(cid, cid) if use_dict else cid
         groups[key].append(cid)
 
@@ -660,7 +662,8 @@ def rank_candidates(
         m_links = [l for l in m_links if not (l["gene_id"] in seen_m or seen_m.add(l["gene_id"]))]
         if len(lit_links) < p.min_links and not m_links:
             continue
-        main = max(cids, key=lambda c: lit[c] + mech[c])
+        # Ana kimlik: en yüksek puanlı; eşitlikte makale işaretlemesinden gelen kimlik (MeSH) metin taramasına (CHEMBL:) tercih edilir
+        main = max(cids, key=lambda c: (round(lit[c] + mech[c], 9), not c.startswith("CHEMBL:")))
         all_links = lit_links + m_links
         evidence[main] = all_links
         drug = drugs.get(key, {}) if use_dict else {}
@@ -668,7 +671,8 @@ def rank_candidates(
         for c in cids:
             votes_all.update(votes[c])
         label = drug.get("name", "").lower() or pick_label(votes_all)
-        aliases = [lab for lab, _ in votes_all.most_common(5) if lab != label][:3]
+        ranked_labels = sorted(votes_all.items(), key=lambda kv: (-kv[1], kv[0]))  # sıklık, eşitlikte alfabetik
+        aliases = [lab for lab, _ in ranked_labels[:5] if lab != label][:3]
         mech_desc = "; ".join(f"{l['action_type'].lower()} {l['gene']}" for l in m_links[:3])
         direct_pmids = sorted({pm for c in cids for pm in direct.get(c, [])})
         n_therapy = len({pm for c in cids for pm in therapy_direct.get(c, set())})
@@ -721,7 +725,10 @@ def rank_candidates(
     if not rows:
         out = pd.DataFrame(columns=COLUMNS)
     else:
-        out = pd.DataFrame(rows, columns=COLUMNS).sort_values(["score", "lit_score"], ascending=False)
+        # Eşit puanda kararlı sıra: literatür puanı, köprü sayısı, sonra ad ve kimlik (aynı veri → aynı sıralama)
+        out = pd.DataFrame(rows, columns=COLUMNS).sort_values(
+            ["score", "lit_score", "n_bridges", "chemical", "chemical_id"], ascending=[False, False, False, True, True], kind="mergesort"
+        )
         out = out.reset_index(drop=True)
         out.index = out.index + 1
         out.index.name = "rank"

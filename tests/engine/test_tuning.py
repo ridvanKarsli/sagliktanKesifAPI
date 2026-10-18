@@ -1,6 +1,6 @@
-from kesif_engine.demo_data import DISEASE, demo_drugs, make_corpus
-from kesif_engine.ranking import NEG, POS, Params, Rec, gene_disease_direction, propagate_direction, rank_candidates
-from kesif_engine.tuning import objective, tune
+from kesif_engine.evaluation.tuning import objective, tune
+from kesif_engine.scoring.ranking import NEG, POS, Params, Rec, gene_disease_direction, propagate_direction, rank_candidates
+from tests.engine.demo_data import DISEASE, demo_drugs, make_corpus
 
 
 class _Corpus:

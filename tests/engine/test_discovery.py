@@ -2,7 +2,8 @@ import json
 
 import pandas as pd
 
-from kesif_engine import discovery, services
+from kesif_engine import health
+from kesif_engine.insights import discovery
 from kesif_server.infrastructure.engine.adapter import EngineAdapter
 
 _is_network_error = EngineAdapter().is_network_error
@@ -61,5 +62,5 @@ def test_services_checks_report_failures_without_raising():
         def request(self, *a, **k):
             raise ConnectionError("offline")
 
-    out = services.check_all(Dead())
+    out = health.check_all(Dead())
     assert len(out) == 5 and not any(r["ok"] for r in out) and all("ConnectionError" in r["detail"] for r in out)

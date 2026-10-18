@@ -1,6 +1,7 @@
-from kesif_engine import labels
-from kesif_engine.backtest import backtest
-from kesif_engine.demo_data import DISEASE, demo_drugs, make_corpus
+from kesif_engine.evaluation import labels
+from kesif_engine.evaluation.backtest import backtest
+from kesif_engine.sources import clinicaltrials
+from tests.engine.demo_data import DISEASE, demo_drugs, make_corpus
 
 CT_PAYLOAD = {
     "studies": [
@@ -25,7 +26,7 @@ CT_PAYLOAD = {
 
 
 def test_parse_trials_and_intervention_candidates():
-    trials = labels.parse_trials(CT_PAYLOAD)
+    trials = clinicaltrials.parse_trials(CT_PAYLOAD)
     assert [t["nct"] for t in trials] == ["NCT1", "NCT2", "NCT3"]
     assert trials[0]["start_year"] == 2019 and trials[2]["start_year"] == 0
     assert labels.intervention_candidates("Apremilast 30 mg BID")[1:] == ["Apremilast"]
@@ -38,7 +39,7 @@ def test_map_trials_to_drugs_takes_earliest_year_and_skips_non_drugs():
         {"chembl_id": "C_INF", "name": "INFLIXIMAB", "max_phase": 4.0, "synonyms": ["Remicade"], "mechanisms": []},
         {"chembl_id": "C_PLA", "name": "PLACEBO", "max_phase": 4.0, "synonyms": [], "mechanisms": []},
     ]
-    first = labels.map_trials_to_drugs(labels.parse_trials(CT_PAYLOAD), drugs, 1.0)
+    first = labels.map_trials_to_drugs(clinicaltrials.parse_trials(CT_PAYLOAD), drugs, 1.0)
     assert first == {"C_APR": 2019, "C_INF": 2012}
 
 

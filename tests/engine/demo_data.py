@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 
-from .ranking import NEG, POS, Rec
+from kesif_engine.scoring.ranking import NEG, POS, Rec
 
 DISEASE = "MESH:D000001"
 

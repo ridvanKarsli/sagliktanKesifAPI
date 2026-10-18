@@ -15,7 +15,7 @@ from collections import Counter
 
 import requests
 
-from .net import HttpClient
+from kesif_engine.core.net import HttpClient
 
 log = logging.getLogger(__name__)
 

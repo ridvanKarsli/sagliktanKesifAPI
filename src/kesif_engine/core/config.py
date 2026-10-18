@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-PACKAGE_DIR = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent.parent  # kesif_engine/
 ROOT = PACKAGE_DIR.parent.parent  # backend/
 DATA_DIR = Path(os.environ.get("KESIF_DATA", ROOT / "data"))
 RESULTS_DIR = Path(os.environ.get("KESIF_RESULTS", ROOT / "results"))

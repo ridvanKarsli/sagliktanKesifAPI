@@ -10,7 +10,7 @@ import logging
 from functools import lru_cache
 from typing import Optional
 
-from kesif_engine import config as engine_config
+from kesif_engine.core import config as engine_config
 
 from .application.use_cases import analyses, auth, candidates, catalog, diseases
 from .core.clock import SystemClock

@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from . import config
+from kesif_engine.core import config
 
 KIND_DRUG = "ilaç"
 KIND_ENDOGENOUS = "endojen"

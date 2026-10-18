@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import time
 
-from . import chembl, genes, labels, pubmed, pubtator
-from .net import HttpClient
+from kesif_engine.core.net import HttpClient
+from kesif_engine.sources import chembl, clinicaltrials, genes, pubmed, pubtator
 
 KNOWN_PMID = "29097191"   # voretigene neparvovec (RP) — PubTator'da işaretli
 KNOWN_GENE = "7124"       # TNF
@@ -59,9 +59,9 @@ def check_chembl(client: HttpClient):
 
 
 def check_clinicaltrials(client: HttpClient):
-    params = {"query.cond": "Behcet Syndrome", "pageSize": 2, "format": "json", "fields": labels.CT_FIELD_SETS[0]}
-    data = client.request("GET", labels.CT_URL, params=params).json()
-    trials = labels.parse_trials(data)
+    params = {"query.cond": "Behcet Syndrome", "pageSize": 2, "format": "json", "fields": clinicaltrials.CT_FIELD_SETS[0]}
+    data = client.request("GET", clinicaltrials.CT_URL, params=params).json()
+    trials = clinicaltrials.parse_trials(data)
     if not trials:
         raise RuntimeError("çalışma listesi boş")
     with_arms = sum(1 for t in trials if t.get("experimental") or t.get("study_type"))

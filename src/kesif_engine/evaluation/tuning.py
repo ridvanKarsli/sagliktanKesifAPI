@@ -13,8 +13,8 @@ import logging
 import math
 from typing import Optional
 
-from .backtest import backtest
-from .ranking import Params
+from kesif_engine.evaluation.backtest import backtest
+from kesif_engine.scoring.ranking import Params
 
 log = logging.getLogger(__name__)
 

@@ -167,10 +167,11 @@ def import_legacy(legacy_root: Path = typer.Argument(..., help="Eski kurulum kö
 @app.command()
 def doctor():
     """Dış veri kaynaklarını (makale, ilaç, klinik çalışma veritabanları) denetler."""
-    from kesif_engine import services
+
+    from kesif_engine import health
 
     ok = True
-    for r in services.check_all():
+    for r in health.check_all():
         ok &= bool(r["ok"])
         typer.echo(f"{'✓' if r['ok'] else '✗'} {r['name']:<28} {r['ms']:>6} ms  {r['detail']}")
     if not ok:

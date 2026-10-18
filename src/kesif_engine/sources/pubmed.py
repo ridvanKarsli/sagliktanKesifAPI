@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from . import config
-from .net import HttpClient
+from kesif_engine.core import config
+from kesif_engine.core.net import HttpClient
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 

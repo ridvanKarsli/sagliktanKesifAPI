@@ -7,9 +7,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from . import config
-from .net import HttpClient
-from .pubmed import EUTILS, _params
+from kesif_engine.core import config
+from kesif_engine.core.net import HttpClient
+from kesif_engine.sources.pubmed import EUTILS, _params
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ def _pubtator_count(client: HttpClient, gid: str):
 
 
 def _pubmed_count(client: HttpClient, names: list):
-    from . import pubmed
+    from kesif_engine.sources import pubmed
 
     terms = " OR ".join(f'"{n}"[Title/Abstract]' for n in names if n)
     if not terms:
@@ -141,7 +141,7 @@ def fetch_gene_counts(client: HttpClient, gene_ids, labels: Optional[dict] = Non
         return cache
     # tek sonda: ağ yoksa 70 gen için ayrı ayrı zaman aşımı beklemeyelim
     try:
-        from . import pubmed
+        from kesif_engine.sources import pubmed
 
         total = pubmed.count(client, TOTAL_QUERY)
     except Exception as exc:  # noqa: BLE001

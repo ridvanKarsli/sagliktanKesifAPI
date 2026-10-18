@@ -1,9 +1,9 @@
 import json
 
-from kesif_engine.backtest import backtest
-from kesif_engine.demo_data import DISEASE, demo_drugs, make_corpus
-from kesif_engine.ranking import rank_candidates
-from kesif_engine.report import build_report
+from kesif_engine.evaluation.backtest import backtest
+from kesif_engine.insights.report import build_report
+from kesif_engine.scoring.ranking import rank_candidates
+from tests.engine.demo_data import DISEASE, demo_drugs, make_corpus
 
 
 def test_report_builds_self_contained_html(tmp_path):

@@ -1,4 +1,4 @@
-from kesif_engine import pubmed
+from kesif_engine.sources import pubmed
 
 
 class _FakeClient:

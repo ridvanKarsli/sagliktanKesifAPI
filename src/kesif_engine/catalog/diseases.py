@@ -9,9 +9,9 @@ import json
 import re
 import unicodedata
 
-from . import config
-from .net import HttpClient
-from .pubmed import EUTILS, _params
+from kesif_engine.core import config
+from kesif_engine.core.net import HttpClient
+from kesif_engine.sources.pubmed import EUTILS, _params
 
 
 def _user_path():

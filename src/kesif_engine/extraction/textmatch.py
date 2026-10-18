@@ -13,7 +13,7 @@ import datetime
 import re
 from typing import Optional
 
-from . import config
+from kesif_engine.core import config
 
 BIOLOGIC_TYPES = {"Protein", "Antibody", "Oligosaccharide", "Oligonucleotide", "Enzyme", "Cell", "Gene"}
 MIN_LEN = 6

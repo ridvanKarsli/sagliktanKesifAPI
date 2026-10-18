@@ -1,5 +1,5 @@
-from kesif_engine.demo_data import DISEASE, demo_drugs, make_corpus
-from kesif_engine.ranking import NEG, POS, Rec, gene_disease_direction, rank_candidates, summarize_direction, top_b_genes
+from kesif_engine.scoring.ranking import NEG, POS, Rec, gene_disease_direction, rank_candidates, summarize_direction, top_b_genes
+from tests.engine.demo_data import DISEASE, demo_drugs, make_corpus
 
 
 def _bg(n=8):

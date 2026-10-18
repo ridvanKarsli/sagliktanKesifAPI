@@ -1,4 +1,4 @@
-from kesif_engine.ranking import NEG, POS, Rec, gene_disease_direction, known_therapies
+from kesif_engine.scoring.ranking import NEG, POS, Rec, gene_disease_direction, known_therapies
 
 
 def test_known_therapies_combines_relations_and_therapy_articles():

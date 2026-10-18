@@ -1,7 +1,7 @@
 from collections import Counter
 
-from kesif_engine.ranking import NEG, POS, Params, Rec, context_set, harm_label, rank_candidates
-from kesif_engine.textmatch import DrugTextIndex, enrich
+from kesif_engine.extraction.textmatch import DrugTextIndex, enrich
+from kesif_engine.scoring.ranking import NEG, POS, Params, Rec, context_set, harm_label, rank_candidates
 
 DRUGS = [
     {"chembl_id": "CHEMBL1201572", "name": "ETANERCEPT", "max_phase": 4.0, "type": "Protein", "synonyms": ["Enbrel"], "mechanisms": []},

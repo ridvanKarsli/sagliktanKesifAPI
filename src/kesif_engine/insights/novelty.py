@@ -4,17 +4,14 @@ from __future__ import annotations
 
 import logging
 
-from . import pubmed
-from .net import HttpClient
+from kesif_engine.core.net import HttpClient
+from kesif_engine.sources import clinicaltrials, pubmed
 
 log = logging.getLogger(__name__)
-CT_URL = "https://clinicaltrials.gov/api/v2/studies"
 
 
 def trials_count(client: HttpClient, condition: str, intervention: str) -> int:
-    params = {"query.cond": condition, "query.intr": intervention, "pageSize": 1, "countTotal": "true"}
-    resp = client.request("GET", CT_URL, params=params)
-    return int(resp.json().get("totalCount", 0))
+    return clinicaltrials.count(client, condition, intervention)
 
 
 def pubmed_direct_count(client: HttpClient, disease_query: str, names) -> int:

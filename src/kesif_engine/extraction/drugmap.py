@@ -12,7 +12,7 @@ import re
 from collections import Counter
 from typing import Optional
 
-from . import config
+from kesif_engine.core import config
 
 log = logging.getLogger(__name__)
 

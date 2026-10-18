@@ -29,10 +29,17 @@ içerir. Arayüz ayrı repodadır (Sağlıktan Keşif — Frontend) ve bu API'ye
 
 ```
 src/
-├── kesif_engine/        Bilimsel çekirdek. Saf Python + pandas. Web/DB bilmez. Dosya tabanlı çalışır.
-│   ├── pipeline.py          adımlar: fetch → drugs → labels → tune → rank → backtest → novelty → report
-│   ├── ranking.py           Swanson ABC puanlama, köprü gen seçimi, özgüllük
-│   ├── backtest.py …        doğrulama, yenilik, keşif özeti, dış servis istemcileri
+├── kesif_engine/        Bilimsel çekirdek (algoritma ve doğruluk). Saf Python + pandas. Web/DB bilmez.
+│   ├── pipeline/            orkestrasyon: steps (fetch → drugs → labels → tune → rank → backtest → novelty → report),
+│   │                        corpus (derlem kurma), status, settings, results — dışarıya açık kapı
+│   ├── insights/            novelty (yenilik kontrolü) · discovery (keşif özeti) · report
+│   ├── health.py            dış veri kaynaklarının sağlık kontrolü
+│   ├── evaluation/          labels (doğrulama etiketleri) · backtest (geriye dönük test) · tuning (parametre ayarı)
+│   ├── scoring/             ranking (puan formülü, köprü gen, özgüllük, yön) · drugspace (ilaç sınıfları)
+│   ├── catalog/             diseases (hastalık tanımları) · mesh (hastalık sözlüğü)
+│   ├── extraction/          drugmap (kimyasal → ilaç) · textmatch (metinden biyolojik ilaç taraması)
+│   ├── sources/             pubmed · pubtator · chembl · genes · clinicaltrials (dış veri istemcileri)
+│   ├── core/                config (ayarlar, kelime listeleri) · net (HTTP) · store (önbellek) · paths (dizin düzeni)
 │   └── resources/           pakete gömülü varsayılan hastalık kataloğu
 └── kesif_server/        Uygulama. Bağımlılık yönü daima içeri: interfaces → application → domain ← infrastructure
     ├── domain/              entities.py (User, Disease, AnalysisRun, Candidate…), errors.py, ports.py (Protocol'ler)
@@ -45,6 +52,11 @@ src/
 alembic/                     şema sürümleri (migration)
 tests/                       engine/ (bilimsel) · server/ (API, sahte motorla; ağ yok)
 ```
+
+Motorun katmanları da tek yönlüdür: `core → sources → catalog / extraction → scoring → evaluation → insights → pipeline`.
+Bir modül yalnızca kendi katmanından ya da altından içe aktarabilir ve motor sunucuyu hiç içe aktarmaz;
+`tests/engine/test_architecture.py` bunu her test çalıştırmasında denetler. Doğruluk ve keşif kalitesiyle ilgili her
+değişiklik `scoring/` ve `evaluation/` içinde yapılır.
 
 İlkeler:
 

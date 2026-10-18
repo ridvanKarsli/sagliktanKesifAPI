@@ -16,8 +16,8 @@ import re
 import unicodedata
 from pathlib import Path
 
-from . import config
-from .net import HttpClient
+from kesif_engine.core import config
+from kesif_engine.core.net import HttpClient
 
 log = logging.getLogger(__name__)
 BASE = "https://nlmpubs.nlm.nih.gov/projects/mesh/MESH_FILES/asciimesh/d{year}.bin"

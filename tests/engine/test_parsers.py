@@ -2,8 +2,10 @@ import json
 
 import pandas as pd
 
-from kesif_engine import chembl, drugmap, genes, novelty, pubmed
-from kesif_engine.pubtator import SCHEMA, parse_biocjson
+from kesif_engine.extraction import drugmap
+from kesif_engine.insights import novelty
+from kesif_engine.sources import chembl, genes, pubmed
+from kesif_engine.sources.pubtator import SCHEMA, parse_biocjson
 
 DOC = {
     "id": "111",
@@ -125,7 +127,7 @@ def test_annotate_isolates_pmids_pubtator_has_not_processed():
     """Çok yeni PMID içeren grup 400 döndürür; grup bölünerek yalnızca o makale 'bekliyor' kaydedilir."""
     import requests
 
-    from kesif_engine import pubtator
+    from kesif_engine.sources import pubtator
 
     class Resp:
         def __init__(self, code, text=""):

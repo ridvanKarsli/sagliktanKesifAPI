@@ -18,8 +18,8 @@ from typing import Optional
 
 import pandas as pd
 
-from . import drugspace
-from .ranking import Params, is_stop, pick_label, rank_candidates
+from kesif_engine.scoring import drugspace
+from kesif_engine.scoring.ranking import Params, is_stop, pick_label, rank_candidates
 
 
 def _auc(scores: pd.Series, positives: set) -> float:

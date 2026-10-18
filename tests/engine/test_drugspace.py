@@ -1,9 +1,10 @@
 """Sekiz hastalık karşılaştırmasından çıkan kalıcı düzeltmelerin testleri."""
 
-from kesif_engine import drugspace
-from kesif_engine.labels import map_trials_to_drugs, parse_trials
-from kesif_engine.pipeline import merge_orthologs
-from kesif_engine.ranking import NEG, POS, Rec, _consistency, filter_specific, gene_disease_direction, rank_candidates, specificity
+from kesif_engine.evaluation.labels import map_trials_to_drugs
+from kesif_engine.pipeline.corpus import merge_orthologs
+from kesif_engine.scoring import drugspace
+from kesif_engine.scoring.ranking import NEG, POS, Rec, _consistency, filter_specific, gene_disease_direction, rank_candidates, specificity
+from kesif_engine.sources.clinicaltrials import parse_trials
 
 D = "MESH:X"
 
@@ -183,7 +184,7 @@ def test_mouse_gene_merged_into_human_ortholog():
 def test_clinicaltrials_field_set_fallback_on_400():
     import requests
 
-    from kesif_engine import labels
+    from kesif_engine.sources import clinicaltrials
 
     class Resp:
         status_code = 400
@@ -193,7 +194,7 @@ def test_clinicaltrials_field_set_fallback_on_400():
 
         def request(self, method, url, params=None, **kw):
             Client.used.append(params["fields"])
-            if params["fields"] in labels.CT_FIELD_SETS[:2]:
+            if params["fields"] in clinicaltrials.CT_FIELD_SETS[:2]:
                 err = requests.HTTPError("400")
                 err.response = Resp()
                 raise err
@@ -204,5 +205,5 @@ def test_clinicaltrials_field_set_fallback_on_400():
                     return {"studies": [_study("N1", 2020, ints=[{"type": "DRUG", "name": "X"}])]}
             return R()
 
-    trials = labels.fetch_trials(Client(), "Test Disease")
-    assert len(trials) == 1 and Client.used[-1] == labels.CT_FIELD_SETS[2]
+    trials = clinicaltrials.fetch_trials(Client(), "Test Disease")
+    assert len(trials) == 1 and Client.used[-1] == clinicaltrials.CT_FIELD_SETS[2]

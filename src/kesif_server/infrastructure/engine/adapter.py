@@ -18,11 +18,15 @@ from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
-from kesif_engine import chembl, discovery, mesh, pipeline, pubmed, services
-from kesif_engine import config as engine_config
-from kesif_engine import diseases as engine_diseases
-from kesif_engine.net import HttpClient
-from kesif_engine.ranking import Params, filter_specific, select_bridges, specificity
+from kesif_engine import health as engine_health
+from kesif_engine import pipeline
+from kesif_engine.catalog import diseases as engine_diseases
+from kesif_engine.catalog import mesh
+from kesif_engine.core import config as engine_config
+from kesif_engine.core.net import HttpClient
+from kesif_engine.insights import discovery
+from kesif_engine.scoring.ranking import Params, filter_specific, select_bridges, specificity
+from kesif_engine.sources import chembl, pubmed
 
 from ...domain.entities import Disease, RunProgress
 from ...domain.errors import ValidationError
@@ -234,7 +238,7 @@ class ExternalServicesAdapter:
     """ExternalServices port'u."""
 
     def health(self) -> List[Dict[str, Any]]:
-        return services.check_all()
+        return engine_health.check_all()
 
     def drug_indications(self, chembl_id: str) -> List[Dict[str, Any]]:
         return chembl.fetch_indications(HttpClient(timeout=20, retries=1), chembl_id)

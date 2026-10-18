@@ -1,6 +1,6 @@
-from kesif_engine.backtest import backtest
-from kesif_engine.demo_data import DISEASE, demo_drugs, make_corpus
-from kesif_engine.ranking import rank_candidates
+from kesif_engine.evaluation.backtest import backtest
+from kesif_engine.scoring.ranking import rank_candidates
+from tests.engine.demo_data import DISEASE, demo_drugs, make_corpus
 
 
 def test_backtest_in_drug_space_reports_all_baselines():

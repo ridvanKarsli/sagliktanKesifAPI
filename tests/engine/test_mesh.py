@@ -1,4 +1,4 @@
-from kesif_engine import mesh
+from kesif_engine.catalog import mesh
 
 SAMPLE = """*NEWRECORD
 RECTYPE = D
@@ -44,7 +44,7 @@ def test_parse_keeps_only_disease_branches():
 def test_search_is_accent_and_case_insensitive(tmp_path, monkeypatch):
     import json
 
-    from kesif_engine import config
+    from kesif_engine.core import config
 
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     mesh._cache.clear()
@@ -61,7 +61,7 @@ def test_search_is_accent_and_case_insensitive(tmp_path, monkeypatch):
 def test_browse_filters_by_category_and_query(tmp_path, monkeypatch):
     import json
 
-    from kesif_engine import config
+    from kesif_engine.core import config
 
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     mesh._cache.clear()
@@ -79,7 +79,7 @@ def test_build_rejects_html_and_empty_catalogs(tmp_path, monkeypatch):
     """NLM beklenmeyen içerik döndürürse boş katalog yazılmamalı; SPARQL yedeği de boşsa hata verilmeli."""
     import pytest
 
-    from kesif_engine import config
+    from kesif_engine.core import config
 
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     mesh._cache.clear()
