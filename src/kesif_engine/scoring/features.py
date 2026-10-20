@@ -13,6 +13,8 @@ Kanallar (hepsi "büyük = daha güçlü kanıt"):
     network     hedeflerin protein ağında hastalık genlerine yakınlığı (derece eşlemeli z-skoru, en yakın hedef)
 
 Ek sütunlar (sıralama kanalı değil, açıklayıcı/denetim): base (mevcut yöntem puanı), penalty (zarar sinyali çarpanı),
+ltc (ilacı hastalığa bağlayan farklı köprü gen sayısı; literatür tabanlı keşifte yayımlanmış "bağlantı terimi sayısı"
+taban çizgisi),
 prevalence (ilacın köprü gen literatüründeki yaygınlığı; "her yerde geçen ilaç" ölçüsü), n_targets.
 
 Genetik ve ağ kanallarında "bilinen ilaç" ve "literatür" kaynaklı kanıt bilinçli olarak kullanılmaz: ilki hastalıkta
@@ -107,7 +109,8 @@ def build(
             cur = base.get(k)
             if cur is None or float(row.score) > cur["base"]:
                 base[k] = {"base": float(row.score), "lit": float(row.lit_score), "mech": float(row.mech_score),
-                           "penalty": float(getattr(row, "penalty", 1.0) or 1.0)}
+                           "penalty": float(getattr(row, "penalty", 1.0) or 1.0),
+                           "ltc": float(getattr(row, "n_bridges", 0) or 0)}
 
     if universe is None:
         keys = set(base)
@@ -131,6 +134,7 @@ def build(
             "lit": b.get("lit", 0.0),
             "mech": b.get("mech", 0.0),
             "penalty": b.get("penalty", 1.0),
+            "ltc": b.get("ltc", 0.0),
             "direct": math.log1p(direct.get(k, 0)),
             "recent": math.log1p(recent.get(k, 0)),
             "genetic": _best(targets, genetic_table, GENETIC_TYPES),
@@ -139,7 +143,7 @@ def build(
             "prevalence": in_c.get(k, 0) / n_c,
             "n_targets": len(targets),
         })
-    df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "direct", "recent", "genetic", "biology",
+    df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "ltc", "direct", "recent", "genetic", "biology",
                                      "network", "prevalence", "n_targets"])
     return df.set_index("key")
 

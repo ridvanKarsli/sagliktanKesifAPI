@@ -62,7 +62,7 @@ def step_benchmark(keys: Optional[Iterable[str]] = None, hold_out: Optional[Iter
             continue
         c.ensure_gene_counts()
         inputs[key] = {"a": c.a, "c": c.c, "labels": c.labels, "params": load_settings(key), "kwargs": c.kwargs(),
-                       "external": c.external}
+                       "external": c.external, "audit": c.audit}
         log.info("Ölçüme alındı: %s (%d makale)", key, len(c.a))
     result = benchmark.run(inputs, hold_out=hold_out, cutoffs=cutoffs, progress=lambda m: log.info("  geriye dönük test: %s", m))
     out = benchmark_dir()
@@ -76,3 +76,29 @@ def step_benchmark(keys: Optional[Iterable[str]] = None, hold_out: Optional[Iter
     for key in inputs:
         (workdir(key) / "benchmark_ref.json").write_text(json.dumps(result["diseases"].get(key, {}), ensure_ascii=False), encoding="utf-8")
     return result
+
+
+# ---------- etiket denetimi ----------
+
+def export_label_audit(key: str, n: int = 50) -> str:
+    """Hastalığın klinik çalışma etiketlerinden rastgele n satır (CSV, ; ayraçlı, kaynak çalışma bağlantısıyla)."""
+    from kesif_engine.evaluation import audit, labels
+    from kesif_engine.sources import chembl
+
+    lab = labels.load(workdir(key) / "labels.json")
+    if not lab:
+        raise FileNotFoundError(f"{key}: doğrulama etiketi yok; önce analizi çalıştırın.")
+    if lab.get("schema", 1) < labels.SCHEMA or not lab.get("first_trial_source"):
+        raise ValueError(f"{key}: etiketler eski şemada (kaynak çalışma bilgisi yok); analizi 'Doğrulama verileri' adımıyla yenileyin.")
+    return audit.to_csv(audit.sample(lab, chembl.load(), n))
+
+
+def import_label_audit(key: str, text: str) -> dict:
+    """İşaretlenmiş CSV'yi okur, önceki turlarla birleştirir ve kaydeder."""
+    from kesif_engine.evaluation import audit
+
+    wd = workdir(key)
+    merged = audit.merge(audit.load(wd), audit.read_marked(text))
+    audit.save(wd, merged)
+    log.info("%s etiket denetimi: %d satır, %d yanlış (hata %s)", key, merged["n_checked"], merged["n_wrong"], merged["error_rate"])
+    return merged

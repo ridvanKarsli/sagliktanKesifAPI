@@ -68,7 +68,16 @@ def status(disease: str) -> dict:
         "steps": st,
         "settings": load_settings(disease).to_dict(),
         "confidence": _confidence(disease),
+        "label_audit": _audit_summary(wd),
     }
+
+
+def _audit_summary(wd: Path) -> dict:
+    path = wd / "label_audit.json"
+    if not path.exists():
+        return {}
+    a = json.loads(path.read_text(encoding="utf-8"))
+    return {k: a.get(k) for k in ("n_checked", "n_wrong", "error_rate", "at")}
 
 
 def _confidence(disease: str) -> dict:

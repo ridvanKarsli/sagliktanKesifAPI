@@ -97,6 +97,28 @@ def _evaluate(rankings: dict, universe: list, positives: set, name: dict, future
     return out
 
 
+TIME_SLICED = ["hastalık makaleleri", "köprü gen literatürü", "doğrudan anılma", "doğrulama etiketleri"]
+
+
+def leakage_report(external: Optional[dict], gene_counts: Optional[dict], use_dict: bool) -> dict:
+    """Kesit yılına göre dilimlenebilen ve dilimlenemeyen girdiler.
+
+    Dilimlenemeyenler bugünün verisidir; ölçülen başarıyı hafif iyimser yapabilirler. Bu yüzden her sonuçla birlikte
+    açıkça raporlanır ve benchmark bu kanalların katkısını ayrıca ölçer.
+    """
+    not_sliced = []
+    if use_dict:
+        not_sliced.append({"input": "ilaç sözlüğü", "detail": "mekanizma (hedef) kayıtları ve ilacın evrene girişi bugünkü en yüksek faza göre"})
+    if gene_counts:
+        not_sliced.append({"input": "gen arka plan sayıları", "detail": "köprü gen özgüllüğü bugünkü toplam literatürle hesaplanır"})
+    ext = external or {}
+    if ext.get("genetic"):
+        not_sliced.append({"input": "genetik ilişki", "detail": "bugünkü genetik veri; bilinen ilaç ve literatür kanıtı dışlanmış"})
+    if ext.get("network"):
+        not_sliced.append({"input": "protein ağı", "detail": "bugünkü etkileşim ağı; metin madenciliği kenarları dışlanmış"})
+    return {"time_sliced": TIME_SLICED, "not_time_sliced": not_sliced}
+
+
 def backtest(
     a_records,
     c_by_gene: dict,
@@ -125,6 +147,7 @@ def backtest(
     a_before, a_after = _split(a_records, cutoff)
     c_before = {g: _split(recs, cutoff)[0] for g, recs in c_by_gene.items()}
     therapy_pmids = set(labels.get("therapy_pmids") or [])
+    audit_out = set(labels.get("audit_excluded") or [])  # elle denetimde yanlış bulunan etiketler: ölçüme hiç girmez
 
     ranked, _ = rank_candidates(
         a_before, c_before, drugs=drugs, drug_map=drug_map, gene_info=gene_info, disease_id=disease_id, params=params,
@@ -192,6 +215,7 @@ def backtest(
         "direct": feats["direct"],
         "recent": feats["recent"],
         "frequency": pd.Series({c: float(seen[c]) for c in base_universe}),
+        "ltc": feats["ltc"],
     }
     for ch in ("genetic", "biology", "network"):
         if ch in channels:
@@ -211,6 +235,7 @@ def backtest(
         "n_excluded_diagnostic": sum(1 for k in seen if kind.get(k) == drugspace.KIND_DIAGNOSTIC),
         "dropped_bridges": ranked.attrs.get("dropped_bridges", []) if hasattr(ranked, "attrs") else [],
         "channels": channels,
+        "leakage": leakage_report(external, gene_counts, use_dict),
         "schemes": {},
     }
     labels_out: dict = {}
@@ -245,7 +270,7 @@ def backtest(
     first_trial = labels.get("first_trial_year") or {}
     if first_trial and use_dict:
         trial_year = {chembl_id: int(year) for chembl_id, year in first_trial.items()}
-        universe = [c for c in base_universe if trial_year.get(c, 9999) > cutoff]
+        universe = [c for c in base_universe if trial_year.get(c, 9999) > cutoff and c not in audit_out]
         uset = set(universe)
         positives = {c for c, y in trial_year.items() if y > cutoff and c in uset}
         after_count = Counter({c: 1 for c in positives})
@@ -262,6 +287,15 @@ def backtest(
         )
         result["schemes"]["trials_novel"]["positives_all"] = sorted(name[c] for c in positives_n)
         labels_out["trials_novel"] = (universe_n, positives_n)
+
+    # 5) trials_late: faz 2 ve üstü çalışmayla ilk kez test edilenler (ikinci, daha katı etiket; etiket şeması 3)
+    first_late = labels.get("first_late_trial_year") or {}
+    if first_late and use_dict:
+        late_year = {k: int(y) for k, y in first_late.items()}
+        universe_l = [c for c in base_universe if late_year.get(c, 9999) > cutoff and c not in audit_out]
+        positives_l = {c for c, y in late_year.items() if y > cutoff and c in set(universe_l)}
+        result["schemes"]["trials_late"] = _evaluate(rankings, universe_l, positives_l, name, Counter({c: 1 for c in positives_l}), ks)
+        labels_out["trials_late"] = (universe_l, positives_l)
 
     # geriye uyumluluk: ana metrikler = en güvenilir mevcut şema
     primary = "trials" if "trials" in result["schemes"] else ("therapy" if "therapy" in result["schemes"] else "mentions")
