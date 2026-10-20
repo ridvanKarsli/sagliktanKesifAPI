@@ -185,3 +185,30 @@ def test_annotate_skips_newest_tail_once_pubtator_lag_is_found():
     asked_new = {p for p in Client.asked if int(p) > processed_up_to + 100}
     assert not asked_new, "eşikten sonraki PMID'ler sorulmamalıydı"
     pubtator.reset_pending_floor()
+
+
+def test_data_until_and_year_search_respect_the_freeze_date():
+    import datetime
+
+    from kesif_engine.sources import pubmed
+
+    assert pubmed.data_until(datetime.date(2026, 10, 20)) == "2026/09/20"
+
+    class Resp:
+        def __init__(self, payload):
+            self._p = payload
+
+        def json(self):
+            return self._p
+
+    class Client:
+        calls: list = []
+
+        def request(self, method, url, params=None, **kw):
+            Client.calls.append((params.get("mindate"), params.get("maxdate")))
+            return Resp({"esearchresult": {"idlist": [f"{params.get('mindate')}"], "count": "1"}})
+
+    ids = pubmed.search_by_year(Client(), "x", 2025, 2027, until="2026/09/20")
+    assert ("2026/01/01", "2026/09/20") in Client.calls
+    assert all(lo[:4] != "2027" for lo, _ in Client.calls if lo)  # kesim yılından sonrası hiç aranmaz
+    assert len(ids) == 2

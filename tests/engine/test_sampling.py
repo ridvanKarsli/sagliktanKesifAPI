@@ -10,7 +10,7 @@ class _FakeClient:
 
     def request(self, method, url, params=None, data=None):
         p = params or data
-        year = int(p.get("mindate", 0) or 0)
+        year = int(str(p.get("mindate") or 0)[:4])  # "2021" ya da "2021/01/01"
         n = self.per_year.get(year, 0)
         retmax = int(p.get("retmax", 0))
         self.calls.append((year, retmax, p.get("sort")))

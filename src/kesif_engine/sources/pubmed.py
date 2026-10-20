@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import re
 from typing import Optional
 
@@ -7,6 +8,16 @@ from kesif_engine.core import config
 from kesif_engine.core.net import HttpClient
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+# Veri kesim gecikmesi: PubTator (gen/ilaç işaretlemesi) PubMed'in birkaç gün–birkaç hafta gerisinden gelir. Son
+# LAG_DAYS günün makaleleri derleme alınmaz; böylece derlemin her makalesi işaretlenmiş olur, analiz eksik kalmaz ve
+# aynı kesim tarihiyle tekrarlanabilir. Kesim tarihi derlem indeksine yazılır.
+LAG_DAYS = 30
+
+
+def data_until(today: Optional[datetime.date] = None) -> str:
+    """Bugünden LAG_DAYS gün önceki tarih, PubMed biçiminde (YYYY/MM/DD)."""
+    d = (today or datetime.date.today()) - datetime.timedelta(days=LAG_DAYS)
+    return d.strftime("%Y/%m/%d")
 
 
 def _params(extra: dict) -> dict:
@@ -58,26 +69,31 @@ def search_by_year(
     start_year: int,
     end_year: int,
     max_total: Optional[int] = None,
+    until: Optional[str] = None,
 ) -> list:
     """Yıl yıl arar (esearch tek istekte en fazla 10000 sonuç verir).
 
     max_total verilirse ve toplam onu aşarsa, her yıldan makale sayısıyla orantılı bir kota alınır
     (alaka sırasına göre), böylece büyük hastalıklarda eski yıllar da temsil edilir ve geriye dönük
-    test anlamlı kalır. max_total yoksa tüm makaleler alınır.
+    test anlamlı kalır. max_total yoksa tüm makaleler alınır. until (YYYY/MM/DD) verilirse o tarihten sonraki
+    makaleler alınmaz (veri kesim tarihi).
     """
+    if until:
+        end_year = min(end_year, int(until[:4]))
     seen: dict = {}
     counts = count_by_year(client, query, start_year, end_year) if max_total else {}
     total = sum(counts.values())
     sampled = bool(max_total) and total > max_total
     for year in range(end_year, start_year - 1, -1):
+        lo, hi = f"{year}/01/01", (until if until and year == int(until[:4]) else f"{year}/12/31")
         if sampled:
             n_year = counts.get(year, 0)
             if n_year == 0:
                 continue
             quota = max(1, int(round(max_total * n_year / total)))
-            ids = search_pmids(client, query, min(quota, 10000), str(year), str(year), sort="relevance")
+            ids = search_pmids(client, query, min(quota, 10000), lo, hi, sort="relevance")
         else:
-            ids = search_pmids(client, query, 10000, str(year), str(year))
+            ids = search_pmids(client, query, 10000, lo, hi)
         for pmid in ids:
             seen.setdefault(pmid, None)
     return list(seen)

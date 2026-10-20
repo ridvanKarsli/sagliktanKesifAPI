@@ -271,6 +271,7 @@ def run_panel(only: Optional[List[str]] = typer.Option(None, "--only", help="Yal
     import time
 
     from kesif_engine import pipeline
+    from kesif_engine.evaluation.labels import SCHEMA as LABELS_SCHEMA
 
     from ...container import Container
     from ...domain.entities import DEFAULT_STEPS, Disease
@@ -294,7 +295,11 @@ def run_panel(only: Optional[List[str]] = typer.Option(None, "--only", help="Yal
     skipped: List[str] = []
     for i, p in enumerate(panel, 1):
         view = c.get_disease(p["key"])
-        if not redo and view.status.get("has_backtest") and view.status.get("has_labels"):
+        st = view.status
+        # yalnızca güncel sürümle tamamlanmış analiz atlanır: yeni etiket şeması, bağımsız kanıt ve veri kesim tarihi
+        current = (st.get("has_backtest") and st.get("has_evidence") and st.get("data_until")
+                   and int(st.get("labels_schema") or 0) >= LABELS_SCHEMA)
+        if not redo and current:
             skipped.append(p["key"])
             continue
         typer.echo(f"[{i}/{len(panel)}] {p['label']} …")

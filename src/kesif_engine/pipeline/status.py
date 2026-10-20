@@ -56,6 +56,8 @@ def status(disease: str) -> dict:
         "n_articles": len(index.get("a_pmids", [])),
         "n_bridges": len(index.get("c_pmids_by_gene", {})),
         "fetched_at": index.get("fetched_at"),
+        "data_until": index.get("data_until"),
+        "labels_schema": _labels_schema(wd),
         "has_drugs": chembl.dictionary_path().exists(),
         "has_labels": (wd / "labels.json").exists(),
         "has_candidates": (rd / "candidates.csv").exists(),
@@ -70,6 +72,16 @@ def status(disease: str) -> dict:
         "confidence": _confidence(disease),
         "label_audit": _audit_summary(wd),
     }
+
+
+def _labels_schema(wd: Path) -> int:
+    path = wd / "labels.json"
+    if not path.exists():
+        return 0
+    try:
+        return int(json.loads(path.read_text(encoding="utf-8")).get("schema") or 1)
+    except (ValueError, json.JSONDecodeError):
+        return 0
 
 
 def _audit_summary(wd: Path) -> dict:

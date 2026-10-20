@@ -60,7 +60,9 @@ def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 
 
     log.info("[1/3] %s makaleleri aranıyor...", cfg["label"])
     this_year = datetime.date.today().year
-    a_pmids = pubmed.search_by_year(client, cfg["pubmed_query"], start_year, this_year, max_a)
+    until = pubmed.data_until()
+    log.info("  veri kesim tarihi: %s (PubTator'ın henüz işlemediği son %d gün alınmaz)", until, pubmed.LAG_DAYS)
+    a_pmids = pubmed.search_by_year(client, cfg["pubmed_query"], start_year, this_year, max_a, until=until)
     log.info("  %d makale bulundu", len(a_pmids))
     if len(a_pmids) < SMALL_CORPUS:
         log.warning("  Küçük derleme (%d makale): köprü genler ve adaylar az olur; sonuçlar temkinli yorumlanmalı.", len(a_pmids))
@@ -80,8 +82,9 @@ def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 
                      ", ".join(f"{lab} ({sp})" for _, lab, sp in dropped[:12]))
     # var olan indeksi koru: daha önce indirilmiş genler yeniden aranmaz
     old = json.loads((wd / "corpus_index.json").read_text(encoding="utf-8")) if (wd / "corpus_index.json").exists() else {}
-    old_c = old.get("c_pmids_by_gene", {}) if old.get("per_gene") == per_gene else {}
-    old_recent = old.get("c_recent_by_gene", {}) if old.get("per_gene_recent") == per_gene_recent else {}
+    same_cut = old.get("data_until") == until
+    old_c = old.get("c_pmids_by_gene", {}) if old.get("per_gene") == per_gene and same_cut else {}
+    old_recent = old.get("c_recent_by_gene", {}) if old.get("per_gene_recent") == per_gene_recent and same_cut else {}
     c_index, c_recent, gene_labels, gene_source = {}, {}, {}, {}
     for gid, label, n, source in bridges:
         names = genes.search_names(gid, label, info)
@@ -90,7 +93,7 @@ def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 
         if gid in old_c:
             c_index[gid] = old_c[gid]
         else:
-            c_index[gid] = pubmed.search_pmids(client, query, retmax=per_gene, sort="relevance")
+            c_index[gid] = pubmed.search_pmids(client, query, retmax=per_gene, mindate="1900/01/01", maxdate=until, sort="relevance")
             log.info("  %s (%s, %s): %d makale", label, info[gid].get("symbol") or "?", source, len(c_index[gid]))
         if per_gene_recent > 0:
             # en yeni makaleler: ilgililik sıralaması eski klasik çalışmaları öne alır, son 3-5 yılın yeni ajanları
@@ -98,7 +101,8 @@ def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 
             if gid in old_recent:
                 c_recent[gid] = old_recent[gid]
             else:
-                c_recent[gid] = pubmed.search_pmids(client, query, retmax=per_gene_recent, sort="pub_date")
+                c_recent[gid] = pubmed.search_pmids(client, query, retmax=per_gene_recent, mindate="1900/01/01", maxdate=until,
+                                                    sort="pub_date")
             seen = set(c_index[gid])
             c_index[gid] = c_index[gid] + [x for x in c_recent[gid] if x not in seen]
         gene_labels[gid] = label
@@ -107,12 +111,21 @@ def step_fetch(disease: str, params: Optional[Params] = None, start_year: int = 
     _ensure(client, meta, ann, all_c)
 
     log.info("[3/3] İndeks yazılıyor...")
+    # Kesim tarihine rağmen PubTator'ın işlemediği makale kalırsa derlemden çıkarılır: işaretlemesi boş bir makale
+    # hastalık literatürünün paydasını şişirir ve "hiç gen/ilaç yok" gibi davranır. Kesim tarihi ilerledikçe gelirler.
+    pending = {p for p in set(a_pmids) | set(all_c) if (ann.get(p) or {}).get("schema", 1) == 0}
+    if pending:
+        a_pmids = [p for p in a_pmids if p not in pending]
+        c_index = {g: [p for p in v if p not in pending] for g, v in c_index.items()}
+        log.info("  PubTator'ın işlemediği %d makale derleme alınmadı (sonraki güncellemede gelir)", len(pending))
     index = {
         "disease": disease,
         "fetched_at": datetime.datetime.now().isoformat(timespec="seconds"),
         "per_gene": per_gene,
         "per_gene_recent": per_gene_recent,
         "max_a": max_a,
+        "data_until": until,
+        "n_pending_excluded": len(pending),
         "params": p.to_dict(),
         "a_pmids": a_pmids,
         "c_pmids_by_gene": c_index,

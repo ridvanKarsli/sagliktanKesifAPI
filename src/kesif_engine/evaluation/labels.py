@@ -36,7 +36,7 @@ SCHEMA = 3
 
 def fetch_therapy_pmids(client: HttpClient, disease_query: str, start_year: int, end_year: int) -> list:
     query = f'({disease_query}) AND "drug therapy"[Subheading]'
-    return pubmed.search_by_year(client, query, start_year, end_year)
+    return pubmed.search_by_year(client, query, start_year, end_year, until=pubmed.data_until())
 
 
 def intervention_candidates(name: str) -> list:
