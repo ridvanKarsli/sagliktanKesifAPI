@@ -22,6 +22,7 @@ from typing import List, Optional
 
 import typer
 
+from ...core.logging import configure_logging
 from ...core.settings import get_settings
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, help="Sağlıktan Keşif sunucusu")
@@ -110,6 +111,7 @@ def run(disease: str, steps: Optional[List[str]] = typer.Option(None, "--step", 
     from ...infrastructure.queue.inprocess import SynchronousQueue
 
     s = get_settings()
+    configure_logging(s.log_level, s.log_json)  # ilerleme ekranda ve iş günlüğünde görünsün
     holder: dict = {}
     c = Container(s, queue=SynchronousQueue(lambda rid: holder.__setitem__("run", c.execute_run(rid))))
     c.startup()
@@ -275,6 +277,7 @@ def run_panel(only: Optional[List[str]] = typer.Option(None, "--only", help="Yal
     from ...infrastructure.queue.inprocess import SynchronousQueue
 
     s = get_settings()
+    configure_logging(s.log_level, s.log_json)  # ilerleme ekranda ve iş günlüğünde görünsün
     holder: dict = {}
     c = Container(s, queue=SynchronousQueue(lambda rid: holder.__setitem__("run", c.execute_run(rid))))
     c.startup()
