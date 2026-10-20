@@ -173,3 +173,25 @@ def test_logistic_fusion_never_gives_negative_weight_to_evidence():
     assert coef["lit"] > 0 and coef["mech"] >= 0
     assert coef["prevalence"] < 0  # denetim sütunu negatif olabilir
     assert np.allclose(fusion.LogisticFusion.from_dict(m.to_dict()).predict(groups[0]), m.predict(groups[0]), atol=1e-4)
+
+
+def test_opentargets_name_variants_and_no_blind_fallback():
+    assert opentargets.name_variants("Arthritis, Rheumatoid") == ["Rheumatoid Arthritis", "Arthritis, Rheumatoid"]
+    assert opentargets.name_variants("Diabetes Mellitus, Type 2")[0] == "Type 2 Diabetes Mellitus"
+
+    class Wrong:
+        def request(self, method, url, json=None, **kwargs):
+            q = json["query"]
+            if "search(" in q:
+                return FakeResponse({"data": {"search": {"hits": [{"id": "EFO_1001416", "name": "rheumatic fever nodule"}]}}})
+            return FakeResponse({"data": {"disease": {"id": "EFO_1001416", "name": "rheumatic fever nodule", "dbXRefs": []}}})
+
+    assert opentargets.find_disease(Wrong(), "Arthritis, Rheumatoid", "MESH:D001172") is None
+
+    class ByName(Wrong):
+        def request(self, method, url, json=None, **kwargs):
+            if "search(" in json["query"]:
+                return FakeResponse({"data": {"search": {"hits": [{"id": "EFO_0000685", "name": "rheumatoid arthritis"}]}}})
+            return FakeResponse({"data": {"disease": {"id": "EFO_0000685", "name": "rheumatoid arthritis", "dbXRefs": []}}})
+
+    assert opentargets.find_disease(ByName(), "Arthritis, Rheumatoid", "MESH:D001172")["matched_by"] == "ad"

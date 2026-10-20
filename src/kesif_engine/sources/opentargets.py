@@ -10,12 +10,13 @@ Kullanılan veri türleri ve bilinçli dışlamalar:
     literature   KULLANILMAZ: literatür kanalımızla aynı bilgiyi ikinci kez saymak olur
 
 Hastalık eşleme: katalogdaki MeSH kimliği (MESH:D001528) Open Targets'ta EFO/MONDO kimliğine çapraz başvuru ile
-bulunur; bulunamazsa ad aramasındaki ilk sonuç kullanılır ve bu durum sonuçta belirtilir.
+bulunur; bulunamazsa yalnızca adı yeterince benzeyen sonuç kabul edilir, yoksa genetik kanal boş kalır.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Dict, Optional
 
 from kesif_engine.core.net import HttpClient
@@ -77,19 +78,48 @@ def _mesh_xref(mesh_id: str) -> str:
     return f"MESH:{code}"
 
 
+def name_variants(name: str) -> list:
+    """MeSH'in ters çevrilmiş adlarını doğal sıraya da çevirir: 'Arthritis, Rheumatoid' → 'Rheumatoid Arthritis',
+    'Diabetes Mellitus, Type 2' → 'Type 2 Diabetes Mellitus'. Arama motoru doğal sırada çok daha isabetli."""
+    name = (name or "").strip()
+    out = []
+    if "," in name:
+        head, tail = name.split(",", 1)
+        out.append(f"{tail.strip()} {head.strip()}")
+    out.append(name)
+    return [v for i, v in enumerate(out) if v and v not in out[:i]]
+
+
+def _tokens(text: str) -> set:
+    return {t for t in re.split(r"[^a-z0-9]+", (text or "").lower()) if t and t not in ("disease", "syndrome", "of", "the")}
+
+
+def _similar(a: str, b: str) -> float:
+    ta, tb = _tokens(a), _tokens(b)
+    return len(ta & tb) / len(ta | tb) if ta and tb else 0.0
+
+
 def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[dict]:
-    """Adla arar; MeSH çapraz başvurusu tutan ilk sonucu seçer. Dönen: {"id", "name", "matched_by"} ya da None."""
-    hits = (_post(client, SEARCH_QUERY, {"q": name}).get("search") or {}).get("hits") or []
-    if not hits:
-        return None
-    want = _mesh_xref(mesh_id)
-    if want:
+    """Hastalığı bulur. Önce MeSH çapraz başvurusu tutan sonuç aranır (her ad biçimiyle); bulunamazsa yalnızca adı
+    yeterince benzeyen sonuç kabul edilir. Hiçbiri tutmazsa None: yanlış hastalığın genetiğini kullanmaktansa
+    genetik kanal boş kalır (romatoid artrit için "rheumatic fever nodule" eşleşmesi böyle önlenir).
+    Dönen: {"id", "name", "matched_by"} ya da None."""
+    want = _mesh_xref(mesh_id).upper()
+    candidates: list = []
+    for q in name_variants(name):
+        hits = (_post(client, SEARCH_QUERY, {"q": q}).get("search") or {}).get("hits") or []
         for h in hits:
-            d = _post(client, XREF_QUERY, {"id": h["id"]}).get("disease") or {}
-            xrefs = {str(x).upper() for x in d.get("dbXRefs") or []}
-            if want.upper() in xrefs:
-                return {"id": h["id"], "name": d.get("name") or h.get("name"), "matched_by": "mesh"}
-    return {"id": hits[0]["id"], "name": hits[0].get("name"), "matched_by": "ad"}
+            if h.get("id") and all(h["id"] != c["id"] for c in candidates):
+                candidates.append(h)
+        if want:
+            for h in hits:
+                d = _post(client, XREF_QUERY, {"id": h["id"]}).get("disease") or {}
+                if want in {str(x).upper() for x in d.get("dbXRefs") or []}:
+                    return {"id": h["id"], "name": d.get("name") or h.get("name"), "matched_by": "mesh"}
+    best = max(candidates, key=lambda h: max(_similar(h.get("name", ""), v) for v in name_variants(name)), default=None)
+    if best and max(_similar(best.get("name", ""), v) for v in name_variants(name)) >= 0.6:
+        return {"id": best["id"], "name": best.get("name"), "matched_by": "ad"}
+    return None
 
 
 def parse_rows(rows) -> Dict[str, Dict[str, float]]:
