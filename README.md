@@ -85,13 +85,26 @@ Birleştirme seçenekleri ve seçim kuralı (`evaluation/benchmark.py`):
 - Seçim: her hastalık 2012, 2015 ve 2018 kesitlerinde test edilir; bir yöntem temel yöntemi eşleştirilmiş farkın %90
   güven aralığıyla geçmedikçe benimsenmez. Paneldeki kontrol hastalıkları karara katılmaz, sonradan raporlanır.
 
-Geliştirme ölçümü (Behçet, ailesel Akdeniz ateşi, retinitis pigmentosa; 9 test; klinik çalışma etiketi; ortalama AP):
-kanal birleştirme **0,195**, temel yöntem 0,174 (fark %90 GA [0,003; 0,038]), öğrenen model 0,167, sıklık sıralaması
-0,096, rastgele 0,009. Bu yüzden paketle gelen karar kanal birleştirmedir; kurulum `kesif benchmark` çalıştırdığında
-kendi ölçümü bunun yerini alır. Genetik ve ağ kanalları birleştirmeye ancak ölçümde katkıları gösterilirse girer.
+Geliştirme ölçümü (Behçet, ailesel Akdeniz ateşi, retinitis pigmentosa; 9 test; klinik çalışma etiketi; ortalama AP),
+etiket temizliğinden sonra: temel yöntem 0,181, kanal birleştirme 0,186 (fark %90 GA [−0,017; 0,025]), öğrenen model
+0,166, bağlantı terimi sayısı (LTC) 0,161, sıklık 0,087, rastgele 0,009. Temizlikten önce kanal birleştirme anlamlı
+biçimde öndeydi; kazancın bir kısmı aynı ilacın tuz biçimlerinin ayrı sayılmasından geliyordu. Fark artık anlamlı
+olmadığı için paketle gelen karar temel yöntemdir; kurulum `kesif benchmark` çalıştırdığında kendi ölçümü bunun yerini
+alır. Genetik ve ağ kanalları birleştirmeye ancak ölçümde katkıları gösterilirse girer.
 
 Değerlendirilip alınmayanlar: graf sinir ağları (TxGNN gibi; GPU, açıklanamayan karar ve tekrarlanabilirlik sorunu),
 gen ifadesi imza eşleştirme (CMap/LINCS; lisans ve hastalık başına imza gerekliliği).
+
+**Doğrulama etiketleri** (`evaluation/labels.py`, şema 3): yalnızca girişimsel, tedavi/önleme amaçlı çalışmaların
+deneysel kolundaki ilaçlar sayılır. Karşılaştırma ya da plasebo kolunda da bulunan ilaçlar (arka plan tedavisi), tanı
+ajanları, görüntüleme izleyicileri ve yardımcı maddeler, 5'ten fazla hastalık listeleyen şemsiye çalışmalar sayılmaz;
+tuz biçimleri ana moleküle birleşir. İkinci etiket `trials_late` yalnızca faz 2+ çalışmalardır; bir yöntem birincil
+etikette kazanıp bu etikette geriliyorsa benimsenmez. `kesif label-audit` her hastalıktan örnek çıkarır, yanlış
+bulunanlar ölçümden çıkar ve hata oranı Kapı 1'e girer. Her geriye dönük test, kesite göre dilimlenemeyen girdileri
+(ilaç sözlüğü, gen arka plan sayıları, genetik, ağ) `leakage` alanında ayrıca raporlar.
+
+**Kapı 1** (`kesif benchmark` çıktısı): ≥ 25 hastalık ölçülmüş, etiket hatası < %5 ve kullanılan yöntem sıklık, LTC ve
+(varsa) tek başına ağ yakınlığı taban çizgilerini %90 güven aralığıyla geçiyor.
 
 **Yöntem güveni** (`insights/confidence.py`): her hastalık için ölçüme dayalı not — yüksek / orta / düşük / ölçülemedi.
 Rastgeleye oran, sıklık sıralamasına göre durum, ilk 25'teki isabet ve örnek sayısından kural tabanlı türetilir;
@@ -172,6 +185,8 @@ Roller: `viewer` okur · `analyst` hastalık ekler, analiz başlatır, parametre
 | `kesif doctor` | dış veri kaynaklarını denetle |
 | `kesif benchmark` | derlemi hazır hastalıklarda yöntem karnesi; birleştirme kararını ölçümle günceller |
 | `kesif panel --add` | 32 hastalıklık ölçüm panelini kataloğa ekle (6'sı karara katılmayan kontrol) |
+| `kesif run-panel` | paneldeki hastalıkları sırayla analiz et; tamamlananları atlar, hata vereni geçer |
+| `kesif label-audit <hastalık>` | etiketlerden 50 satırlık denetim örneği çıkar; `--import <csv>` ile işaretlenmişi geri al |
 
 ## Test ve kalite
 

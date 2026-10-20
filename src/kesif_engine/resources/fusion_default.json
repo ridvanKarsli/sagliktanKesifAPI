@@ -1,7 +1,6 @@
 {
- "method": "rrf",
- "channels": ["lit", "mech", "direct", "recent"],
- "verdict": "benimsendi",
- "measured_as": "rrf_core",
- "reason": "Behçet, ailesel Akdeniz ateşi ve retinitis pigmentosa; 2012, 2015 ve 2018 kesitleri (9 grup), klinik çalışma etiketi. Ortalama AP: sıra birleştirme 0.195, mevcut yöntem 0.174 (fark %90 GA [0.003, 0.038]; 7 grupta önde, 2 grupta geride). Öğrenen model, hastalık eğitimden çıkarılarak ölçüldüğünde 0.167 ile mevcut yöntemi geçemedi. Kurulum kendi benchmark ölçümünü yaptığında bu kararın yerini o alır."
+ "method": "base",
+ "verdict": "korundu",
+ "measured_as": "base",
+ "reason": "Behçet, ailesel Akdeniz ateşi ve retinitis pigmentosa; 2012, 2015 ve 2018 kesitleri (9 test), klinik çalışma etiketi; tuz biçimleri ana moleküle birleştirildikten ve tanı/yardımcı maddeler ayıklandıktan sonra. Ortalama AP: temel yöntem 0.181, sıra birleştirme 0.186 (fark %90 GA [-0.017, 0.025]; 6 testte önde, 3'ünde geride), öğrenen model 0.166, bağlantı terimi sayısı 0.161, sıklık 0.087, rastgele 0.009. Fark anlamlı olmadığı için temel yöntem korunuyor; 30 hastalıklık panel ölçümü bu kararın yerini alır."
 }
