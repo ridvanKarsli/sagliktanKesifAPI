@@ -148,3 +148,40 @@ def test_annotate_isolates_pmids_pubtator_has_not_processed():
 
     out = pubtator.annotate(Client(), ["1", "2", "999", "4"])
     assert out["999"]["schema"] == 0 and out["1"]["schema"] == pubtator.SCHEMA and set(out) == {"1", "2", "999", "4"}
+
+
+def test_annotate_skips_newest_tail_once_pubtator_lag_is_found():
+    """En yeni makaleler henüz işlenmemiş: ilk bekleyen bulununca daha yeni PMID'ler sorulmadan beklemeye alınır;
+    tek bir eski bekleyen makale ise eşik kurmaz."""
+    import requests
+
+    from kesif_engine.sources import pubtator
+
+    processed_up_to = 5_000_100
+    odd_old = "4000000"
+
+    class Resp:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+
+    class Client:
+        asked: list = []
+
+        def request(self, method, url, params=None, **kw):
+            ids = params["pmids"].split(",")
+            Client.asked.extend(ids)
+            if any(int(p) > processed_up_to or p == odd_old for p in ids):
+                err = requests.HTTPError("400")
+                err.response = Resp(400)
+                raise err
+            return Resp(200, json.dumps([{"pmid": p, "passages": []} for p in ids]))
+
+    pubtator.reset_pending_floor()
+    pmids = [odd_old] + [str(5_000_000 + i) for i in range(400)]
+    out = pubtator.annotate(Client(), pmids)
+    assert out[odd_old]["schema"] == 0
+    assert out["5000050"]["schema"] == pubtator.SCHEMA  # eski bekleyen makale eşik kurmadı
+    assert all(out[str(5_000_000 + i)]["schema"] == 0 for i in range(101, 400))
+    asked_new = {p for p in Client.asked if int(p) > processed_up_to + 100}
+    assert not asked_new, "eşikten sonraki PMID'ler sorulmamalıydı"
+    pubtator.reset_pending_floor()

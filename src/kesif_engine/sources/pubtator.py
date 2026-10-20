@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
+from typing import Dict, Optional
 
 import requests
 
@@ -134,9 +135,36 @@ def parse_biocjson(text: str) -> dict:
     return out
 
 
-def _fetch_batch(client: HttpClient, batch: list) -> dict:
-    """Bir grubu işaretler. PubTator çok yeni (henüz işlenmemiş) PMID içeren gruba 400/404 döndürür; grup
-    ikiye bölünerek sorunlu makale yalnız bırakılır ve 'bekliyor' (şema 0) kaydedilir."""
+# PubTator, PubMed'in birkaç gün–birkaç hafta gerisinden gelir: en yeni makaleler henüz işlenmemiştir. Bunları tek tek
+# sormak (grup ikiye bölünerek) makale başına ~1 sn sürer; en yeni binlerce makalede saatler kaybettirir. İlk "henüz
+# işlenmemiş" makale görüldüğünde onun PMID'si eşik olur: daha yeni PMID'ler sorulmadan "bekliyor" işaretlenir ve bir
+# sonraki indirmede yeniden denenir. Eşik yalnızca gerçekten yeni bölgede kurulur (görülen en büyük PMID'nin WINDOW
+# kadar altına inmez); böylece tek bir tuhaf eski makale binlerce makaleyi bekletmez.
+WINDOW = 300_000  # ≈ 6–8 haftalık PubMed eklemesi
+_state: Dict[str, Optional[int]] = {"floor": None, "max_seen": 0}
+
+
+def reset_pending_floor() -> None:
+    _state["floor"], _state["max_seen"] = None, 0
+
+
+def _pid(pmid) -> int:
+    try:
+        return int(pmid)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _note_pending(pmid: str) -> None:
+    n = _pid(pmid)
+    floor, max_seen = _state["floor"], _state["max_seen"] or 0
+    if n and n >= max_seen - WINDOW and (floor is None or n < floor):
+        _state["floor"] = n
+
+
+def _fetch_batch(client: HttpClient, batch: list, pending: list) -> dict:
+    """Bir grubu işaretler. PubTator henüz işlenmemiş PMID içeren gruba 400/404 döndürür; grup ikiye bölünerek sorunlu
+    makale yalnız bırakılır ve 'bekliyor' (şema 0) kaydedilir."""
     try:
         resp = client.request("GET", URL, params={"pmids": ",".join(batch)})
         return parse_biocjson(resp.text)
@@ -145,19 +173,34 @@ def _fetch_batch(client: HttpClient, batch: list) -> dict:
         if code not in (400, 404):
             raise
         if len(batch) == 1:
-            log.info("PubTator henüz işlememiş (HTTP %s): %s; sonraki indirmede yeniden denenecek", code, batch[0])
+            pending.append(batch[0])
+            _note_pending(batch[0])
             return {batch[0]: empty_record(batch[0], pending=True)}
         mid = len(batch) // 2
-        out = _fetch_batch(client, batch[:mid])
-        out.update(_fetch_batch(client, batch[mid:]))
+        out = _fetch_batch(client, batch[:mid], pending)
+        out.update(_fetch_batch(client, batch[mid:], pending))
         return out
 
 
 def annotate(client: HttpClient, pmids: list) -> dict:
     out: dict = {}
+    pending: list = []
+    skipped = 0
     for i in range(0, len(pmids), BATCH):
         batch = pmids[i : i + BATCH]
-        parsed = _fetch_batch(client, batch)
+        _state["max_seen"] = max(_state["max_seen"] or 0, max((_pid(p) for p in batch), default=0))
+        floor = _state["floor"]
+        ask = [p for p in batch if floor is None or _pid(p) < floor]
+        parsed = _fetch_batch(client, ask, pending) if ask else {}
         for pmid in batch:
-            out[pmid] = parsed.get(pmid, empty_record(pmid))
+            if pmid in parsed:
+                out[pmid] = parsed[pmid]
+            elif floor is not None and _pid(pmid) >= floor:
+                out[pmid] = empty_record(pmid, pending=True)
+                skipped += 1
+            else:
+                out[pmid] = empty_record(pmid)
+    if pending or skipped:
+        log.info("PubTator henüz işlememiş: %d makale (en yeni PMID'ler; %d tanesi sorulmadan atlandı). "
+                 "Bir sonraki indirmede yeniden denenecek.", len(pending) + skipped, skipped)
     return out
