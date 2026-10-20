@@ -12,6 +12,7 @@ from kesif_engine.core import config
 from kesif_engine.core.net import HttpClient
 from kesif_engine.core.paths import workdir
 from kesif_engine.core.store import JsonlCache
+from kesif_engine.evaluation import audit as label_audit
 from kesif_engine.evaluation import labels
 from kesif_engine.extraction import drugmap
 from kesif_engine.pipeline.settings import load_settings
@@ -122,6 +123,7 @@ class Corpus:
         self.disease_id = self._detect_disease_id()
         self.hereditary = mesh.is_hereditary(self.disease_id) or mesh.is_hereditary(self.cfg.get("mesh_id", ""))
         self.labels = labels.load(wd / "labels.json")
+        self.audit = label_audit.load(wd)
         ext_path = wd / "evidence_external.json"
         self.external = json.loads(ext_path.read_text(encoding="utf-8")) if ext_path.exists() else {}
         if not self.labels:
@@ -155,6 +157,13 @@ class Corpus:
         for cid in votes:
             if cid.startswith("CHEMBL:"):
                 self.drug_map[cid] = cid.split(":", 1)[1]
+        # tuz/ester biçimleri ana moleküle: metformin ve metformin hidroklorür tek aday, tek doğrulama anahtarı
+        canonical = chembl.canonical_ids(drugs)
+        self.drug_map = {cid: (canonical.get(v, v) if canonical.get(v, v) in self.drugs else v) for cid, v in self.drug_map.items()}
+        wrong = label_audit.excluded_ids(self.audit)
+        if wrong and self.labels:
+            # denetimde yanlış bulunan etiket: ana molekül ve tüm tuz biçimleri ölçümden çıkar
+            self.labels = {**self.labels, "audit_excluded": sorted(k for k, p in canonical.items() if p in wrong or k in wrong)}
         (wd / "drug_map.json").write_text(json.dumps(self.drug_map, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def _detect_disease_id(self) -> str:

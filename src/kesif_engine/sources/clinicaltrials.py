@@ -12,6 +12,7 @@ CT_URL = "https://clinicaltrials.gov/api/v2/studies"
 # Alan listesi: API bir ad kümesini reddederse (HTTP 400) sırayla sonrakine düşülür. En sonuncusu eski (şema 1) listedir;
 # kol bilgisi gelmez ama iş durmaz (etiket kalitesi düşer, günlükte uyarı verilir).
 CT_FIELD_SETS = [
+    "protocolSection.identificationModule.nctId,protocolSection.statusModule.startDateStruct,protocolSection.designModule,protocolSection.armsInterventionsModule,protocolSection.conditionsModule",
     "protocolSection.identificationModule.nctId,protocolSection.statusModule.startDateStruct,protocolSection.designModule,protocolSection.armsInterventionsModule",
     "NCTId,StartDate,StudyType,DesignPrimaryPurpose,Phase,ArmGroupType,ArmGroupInterventionNames,InterventionName,InterventionType",
     "NCTId,StartDate,StudyType,DesignPrimaryPurpose,InterventionName,InterventionType",
@@ -35,9 +36,12 @@ def _strip_arm_prefix(name: str) -> str:
 
 def parse_trials(payload: dict) -> list:
     """ClinicalTrials.gov v2 yanıtından çalışma kayıtları:
-    {nct, start_year, study_type, purpose, phases, interventions:[(type, name)], experimental:[name]}
+    {nct, start_year, study_type, purpose, phases, interventions:[(type, name)], experimental:[name],
+     arms:[{type, names}], conditions:[ad]}
 
     experimental: DENEYSEL kollarda kullanılan müdahale adları (kol bilgisi yoksa boş; eşleme tüm müdahalelere düşer).
+    arms: kolların türü ve içerdiği müdahaleler; bir ilacın karşılaştırma/plasebo kolunda da bulunması onun test edilen
+    ilaç değil arka plan ya da karşılaştırma tedavisi olduğunu gösterir (labels.map_trials_to_drugs).
     """
     out = []
     for study in payload.get("studies", []):
@@ -52,11 +56,14 @@ def parse_trials(payload: dict) -> list:
             if name:
                 ints.append(((iv.get("type") or "").upper(), name))
         experimental = []
+        arms = []
         for arm in ami.get("armGroups") or []:
-            if (arm.get("type") or "").upper() in ARM_EXPERIMENTAL:
-                for n in arm.get("interventionNames") or []:
-                    n = _strip_arm_prefix(n)
-                    if n and n not in experimental:
+            atype = (arm.get("type") or "").upper()
+            names = [x for x in (_strip_arm_prefix(n) for n in arm.get("interventionNames") or []) if x]
+            arms.append({"type": atype, "names": names})
+            if atype in ARM_EXPERIMENTAL:
+                for n in names:
+                    if n not in experimental:
                         experimental.append(n)
         out.append({
             "nct": nct,
@@ -66,6 +73,8 @@ def parse_trials(payload: dict) -> list:
             "phases": [str(x).upper() for x in (design.get("phases") or [])],
             "interventions": ints,
             "experimental": experimental,
+            "arms": arms,
+            "conditions": [str(c) for c in ((ps.get("conditionsModule") or {}).get("conditions") or [])],
         })
     return out
 

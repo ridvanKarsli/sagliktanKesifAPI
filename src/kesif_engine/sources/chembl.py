@@ -105,6 +105,21 @@ def assemble(molecules, mechanisms, targets: dict) -> list:
     return sorted(drugs.values(), key=lambda d: (-d["max_phase"], d["name"]))
 
 
+def canonical_ids(drugs: list) -> dict:
+    """Tuz/ester biçimini ana moleküle eşler: {chembl_id: ana_chembl_id}. Ana molekül sözlükte yoksa kendisi.
+
+    Aynı ilaç sözlükte birden fazla kayıtla bulunur (metformin / metformin hidroklorür, setirizin / setirizin
+    hidroklorür). Ayrı tutulursa yıllardır kullanılan bir ilacın tuz biçimi doğrulamada "yeni klinik çalışmaya giren
+    ilaç" sayılır, sıralamada da aynı ilaç iki satır olur (astım etiketlerinde 2.125 böyle kayıt görüldü).
+    """
+    ids = {d["chembl_id"] for d in drugs}
+    out = {}
+    for d in drugs:
+        parent = d.get("parent") or d["chembl_id"]
+        out[d["chembl_id"]] = parent if parent in ids else d["chembl_id"]
+    return out
+
+
 def dictionary_path() -> Path:
     path = config.DATA_DIR / "drugs" / "chembl_drugs.json"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -137,6 +137,11 @@ DIAGNOSTIC_NAMES = {
     "carboxymethylcellulose sodium", "sodium alginate", "alginate", "chitosan", "poliglusam", "pectin", "agar",
     "starch", "betadex", "corn oil", "silk fibroin", "gold", "platinum", "silver", "gallium", "cesium",
     "rubidium rb-82", "calcium phosphate, tribasic", "calcium carbonate", "sodium thiosulfate", "aminohippurate sodium",
+    # PET/SPECT izleyicileri ve inhaler itici gazları/yardımcı maddeleri: klinik çalışmada görüntüleme ya da cihaz
+    # bileşeni olarak geçer, test edilen tedavi değildir (astım etiketlerinde görüldü: fludeoksiglukoz, norfluran)
+    "fludeoxyglucose", "fludeoxyglucose f-18", "florbetapir", "florbetaben", "flutemetamol", "fluciclovine",
+    "piflufolastat", "flotufolastat", "flortaucipir", "ioflupane", "norflurane", "apaflurane", "hfa-134a", "hfa-227",
+    "lactose", "lactose monohydrate", "magnesium stearate", "inulin",
 }
 
 # Vücutta zaten bulunan moleküller: hormonlar, nörotransmitterler, aracı moleküller, metabolitler, plazma
