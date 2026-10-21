@@ -212,3 +212,16 @@ def test_data_until_and_year_search_respect_the_freeze_date():
     assert ("2026/01/01", "2026/09/20") in Client.calls
     assert all(lo[:4] != "2027" for lo, _ in Client.calls if lo)  # kesim yılından sonrası hiç aranmaz
     assert len(ids) == 2
+
+
+def test_clinicaltrials_count_tolerates_control_characters():
+    from kesif_engine.sources import clinicaltrials
+
+    class Resp:
+        text = '{"totalCount": 7, "note": "satır\x01sonu"}'
+
+    class Client:
+        def request(self, *a, **k):
+            return Resp()
+
+    assert clinicaltrials.count(Client(), "x", "y") == 7

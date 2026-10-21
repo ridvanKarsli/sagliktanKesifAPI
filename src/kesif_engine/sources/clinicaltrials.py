@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -22,6 +23,12 @@ CT_FIELDS = CT_FIELD_SETS[0]
 # Tedavi ya da önleme amaçlı çalışmalar sayılır; tanı, temel bilim, tarama, sağlık hizmeti, cihaz çalışmaları sayılmaz.
 PURPOSES_OK = {"TREATMENT", "PREVENTION", ""}
 ARM_EXPERIMENTAL = {"EXPERIMENTAL"}
+
+
+def _json(resp) -> dict:
+    """Bazı kayıtlar JSON içinde ham denetim karakteri taşıyor (ankilozan spondilitte görüldü): katı olmayan ayrıştırma."""
+    text = getattr(resp, "text", None)
+    return json.loads(text, strict=False) if isinstance(text, str) else resp.json()
 
 
 def _year(date_str) -> int:
@@ -90,7 +97,7 @@ def _ct_page(client: HttpClient, condition: str, fields: str, token):
     params = {"query.cond": condition, "pageSize": 1000, "format": "json", "fields": fields}
     if token:
         params["pageToken"] = token
-    return client.request("GET", CT_URL, params=params).json()
+    return _json(client.request("GET", CT_URL, params=params))
 
 
 def fetch_trials(client: HttpClient, condition: str) -> list:
@@ -129,4 +136,4 @@ def fetch_trials(client: HttpClient, condition: str) -> list:
 def count(client: HttpClient, condition: str, intervention: str) -> int:
     """Hastalık + müdahale için kayıtlı çalışma sayısı."""
     params = {"query.cond": condition, "query.intr": intervention, "pageSize": 1, "countTotal": "true"}
-    return int(client.request("GET", CT_URL, params=params).json().get("totalCount", 0))
+    return int(_json(client.request("GET", CT_URL, params=params)).get("totalCount", 0))

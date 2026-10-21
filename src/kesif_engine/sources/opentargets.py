@@ -99,6 +99,15 @@ def _similar(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb) if ta and tb else 0.0
 
 
+def _search(client: HttpClient, q: str) -> list:
+    """Hastalık araması; boş yanıt bir kez yeniden denenir (servis zaman zaman boş sonuç dönebiliyor)."""
+    for _ in range(2):
+        hits = (_post(client, SEARCH_QUERY, {"q": q}).get("search") or {}).get("hits") or []
+        if hits:
+            return hits
+    return []
+
+
 def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[dict]:
     """Hastalığı bulur. Önce MeSH çapraz başvurusu tutan sonuç aranır (her ad biçimiyle); bulunamazsa yalnızca adı
     yeterince benzeyen sonuç kabul edilir. Hiçbiri tutmazsa None: yanlış hastalığın genetiğini kullanmaktansa
@@ -107,7 +116,7 @@ def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[d
     want = _mesh_xref(mesh_id).upper()
     candidates: list = []
     for q in name_variants(name):
-        hits = (_post(client, SEARCH_QUERY, {"q": q}).get("search") or {}).get("hits") or []
+        hits = _search(client, q)
         for h in hits:
             if h.get("id") and all(h["id"] != c["id"] for c in candidates):
                 candidates.append(h)
@@ -162,7 +171,9 @@ def fetch(client: HttpClient, name_en: str, mesh_id: str = "") -> dict:
     """Bir hastalık için genetik/biyolojik kanıt paketi."""
     disease = find_disease(client, name_en, mesh_id)
     if not disease:
-        return {"disease": None, "targets": {}, "note": "Open Targets'ta hastalık bulunamadı."}
+        log.warning("  genetik kanıt: '%s' (%s) Open Targets'ta güvenilir biçimde eşlenemedi; genetik kanal boş kalacak.",
+                    name_en, mesh_id or "MeSH yok")
+        return {"disease": None, "targets": {}, "note": "Open Targets'ta hastalık güvenilir biçimde eşlenemedi."}
     targets = associations(client, disease["id"])
     n_gen = sum(1 for v in targets.values() if any(k in v for k in ("genetic_association", "somatic_mutation")))
     log.info("  genetik kanıt: %s (%s) — %d hedef, %d'inde genetik ilişki", disease["name"], disease["id"], len(targets), n_gen)
