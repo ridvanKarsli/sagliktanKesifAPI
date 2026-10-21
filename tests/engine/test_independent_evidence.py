@@ -195,3 +195,44 @@ def test_opentargets_name_variants_and_no_blind_fallback():
             return FakeResponse({"data": {"disease": {"id": "EFO_0000685", "name": "rheumatoid arthritis", "dbXRefs": []}}})
 
     assert opentargets.find_disease(ByName(), "Arthritis, Rheumatoid", "MESH:D001172")["matched_by"] == "ad"
+
+
+def test_opentargets_falls_back_to_map_ids_and_reads_msh_prefix():
+    """Serbest arama yalnızca alt tipleri döndürse bile asıl hastalık doğrudan eşlemeyle bulunur."""
+
+    class Subtypes:
+        def request(self, method, url, json=None, **kwargs):
+            q = json["query"]
+            if "search(" in q:
+                return FakeResponse({"data": {"search": {"hits": [
+                    {"id": "EFO_0003929", "name": "relapsing-remitting multiple sclerosis"},
+                    {"id": "EFO_0003840", "name": "primary progressive multiple sclerosis"}]}}})
+            if "mapIds" in q:
+                return FakeResponse({"data": {"mapIds": {"mappings": [
+                    {"term": "Multiple Sclerosis", "hits": [{"id": "MONDO_0005301", "name": "multiple sclerosis"}]}]}}})
+            vid = json["variables"]["id"]
+            xrefs = ["MSH:D009103"] if vid == "MONDO_0005301" else ["MSH:D020529"]
+            return FakeResponse({"data": {"disease": {"id": vid, "name": "x", "dbXRefs": xrefs}}})
+
+    hit = opentargets.find_disease(Subtypes(), "Multiple Sclerosis", "MESH:D009103")
+    assert hit["id"] == "MONDO_0005301" and hit["matched_by"] == "mesh"
+
+
+def test_string_skips_unmapped_genes_instead_of_failing_on_404():
+    import requests
+
+    class Partial:
+        def __init__(self):
+            self.calls = 0
+
+        def request(self, method, url, data=None, **kwargs):
+            self.calls += 1
+            ids = data["identifiers"].split("\r")
+            if "BADGENE" in ids:  # STRING: gruptaki bir tanımlayıcı eşlenemediğinde 404
+                resp = requests.Response()
+                resp.status_code = 404
+                raise requests.HTTPError(response=resp)
+            return FakeResponse([{"preferredName_A": a, "preferredName_B": "STAT3", "escore": 0.9, "dscore": 0.0} for a in ids])
+
+    edges = string_ppi.partners(Partial(), ["IL6", "TNF", "BADGENE"])
+    assert {(a, b) for a, b, _ in edges} == {("IL6", "STAT3"), ("STAT3", "TNF")}

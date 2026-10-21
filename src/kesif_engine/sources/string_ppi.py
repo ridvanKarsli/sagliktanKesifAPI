@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, Iterable, List, Tuple
 
+import requests
+
 from kesif_engine.core.net import HttpClient
 
 log = logging.getLogger("kesif")
@@ -51,15 +53,33 @@ def _chunks(seq: List[str], n: int):
         yield seq[i : i + n]
 
 
-def partners(client: HttpClient, symbols: Iterable[str], limit: int = PARTNER_LIMIT) -> List[Tuple[str, str, float]]:
-    """Tohum genlerin birinci derece komşuları (deneysel/veritabanı kenarlarıyla)."""
-    items: list = []
-    syms = sorted({s.upper() for s in symbols if s})
-    for chunk in _chunks(syms, 100):
+def _partners_chunk(client: HttpClient, chunk: List[str], limit: int, skipped: List[str]) -> list:
+    """Bir grup gen için komşular. STRING, gruptaki tanımlayıcıların hiçbiri eşlenemediğinde 404 döner; bu durumda
+    grup ikiye bölünerek yeniden denenir, tek başına eşlenemeyen gen atlanır (bütün ağ kanalı tek gen yüzünden boşalmaz)."""
+    try:
         resp = client.request("POST", f"{BASE}/interaction_partners", data={
             "identifiers": "\r".join(chunk), "species": SPECIES, "limit": limit, "required_score": 150,
             "caller_identity": CALLER})
-        items.extend(resp.json() or [])
+    except requests.HTTPError as exc:
+        if exc.response is None or exc.response.status_code not in (400, 404):
+            raise
+        if len(chunk) == 1:
+            skipped.append(chunk[0])
+            return []
+        mid = len(chunk) // 2
+        return _partners_chunk(client, chunk[:mid], limit, skipped) + _partners_chunk(client, chunk[mid:], limit, skipped)
+    return resp.json() or []
+
+
+def partners(client: HttpClient, symbols: Iterable[str], limit: int = PARTNER_LIMIT) -> List[Tuple[str, str, float]]:
+    """Tohum genlerin birinci derece komşuları (deneysel/veritabanı kenarlarıyla)."""
+    items: list = []
+    skipped: List[str] = []
+    syms = sorted({s.upper() for s in symbols if s})
+    for chunk in _chunks(syms, 100):
+        items.extend(_partners_chunk(client, chunk, limit, skipped))
+    if skipped:
+        log.info("  protein ağı: STRING'in tanımadığı %d gen atlandı (%s)", len(skipped), ", ".join(skipped[:10]))
     return parse_edges(items)
 
 

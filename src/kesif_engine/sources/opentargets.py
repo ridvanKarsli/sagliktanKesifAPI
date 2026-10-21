@@ -31,8 +31,16 @@ MAX_TARGETS = 3000
 
 SEARCH_QUERY = """
 query Search($q: String!) {
-  search(queryString: $q, entityNames: ["disease"], page: {index: 0, size: 10}) {
+  search(queryString: $q, entityNames: ["disease"], page: {index: 0, size: 25}) {
     hits { id name }
+  }
+}
+"""
+
+MAPIDS_QUERY = """
+query Map($terms: [String!]!) {
+  mapIds(queryTerms: $terms, entityNames: ["disease"]) {
+    mappings { term hits { id name } }
   }
 }
 """
@@ -78,6 +86,16 @@ def _mesh_xref(mesh_id: str) -> str:
     return f"MESH:{code}"
 
 
+def _xref_codes(xrefs) -> set:
+    """dbXRefs içindeki MeSH kodları; kaynaklar 'MESH:', 'MeSH:' ve 'MSH:' öneklerini karışık kullanır."""
+    out = set()
+    for x in xrefs or []:
+        pre, _, code = str(x).partition(":")
+        if code and pre.upper() in ("MESH", "MSH"):
+            out.add(f"MESH:{code.strip().upper()}")
+    return out
+
+
 def name_variants(name: str) -> list:
     """MeSH'in ters çevrilmiş adlarını doğal sıraya da çevirir: 'Arthritis, Rheumatoid' → 'Rheumatoid Arthritis',
     'Diabetes Mellitus, Type 2' → 'Type 2 Diabetes Mellitus'. Arama motoru doğal sırada çok daha isabetli."""
@@ -108,26 +126,58 @@ def _search(client: HttpClient, q: str) -> list:
     return []
 
 
+def _map_ids(client: HttpClient, terms: list) -> list:
+    """Terimi doğrudan kimliğe eşleyen ikinci yol. Serbest metin araması alt tipleri (örn. 'relapsing-remitting
+    multiple sclerosis') üst sıraya koyup asıl hastalığı ilk sayfanın dışında bırakabiliyor; mapIds tam eşleme yapar."""
+    try:
+        data = _post(client, MAPIDS_QUERY, {"terms": terms}).get("mapIds") or {}
+    except Exception as exc:  # noqa: BLE001 — eski API sürümünde alan olmayabilir; arama yolu yine çalışır
+        log.info("  Open Targets mapIds kullanılamadı (%s)", str(exc)[:120])
+        return []
+    return [h for m in data.get("mappings") or [] for h in m.get("hits") or []]
+
+
 def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[dict]:
-    """Hastalığı bulur. Önce MeSH çapraz başvurusu tutan sonuç aranır (her ad biçimiyle); bulunamazsa yalnızca adı
-    yeterince benzeyen sonuç kabul edilir. Hiçbiri tutmazsa None: yanlış hastalığın genetiğini kullanmaktansa
-    genetik kanal boş kalır (romatoid artrit için "rheumatic fever nodule" eşleşmesi böyle önlenir).
-    Dönen: {"id", "name", "matched_by"} ya da None."""
+    """Hastalığı bulur. Önce MeSH çapraz başvurusu tutan sonuç aranır (her ad biçimiyle, arama ve doğrudan eşleme
+    yollarıyla); bulunamazsa yalnızca adı yeterince benzeyen sonuç kabul edilir, tam ad eşleşmesi önceliklidir.
+    Hiçbiri tutmazsa None: yanlış hastalığın genetiğini kullanmaktansa genetik kanal boş kalır (romatoid artrit için
+    "rheumatic fever nodule" eşleşmesi böyle önlenir). Dönen: {"id", "name", "matched_by"} ya da None."""
     want = _mesh_xref(mesh_id).upper()
+    variants = name_variants(name)
     candidates: list = []
-    for q in name_variants(name):
-        hits = _search(client, q)
+    checked: set = set()
+
+    def add(hits: list) -> Optional[dict]:
         for h in hits:
             if h.get("id") and all(h["id"] != c["id"] for c in candidates):
                 candidates.append(h)
-        if want:
-            for h in hits:
-                d = _post(client, XREF_QUERY, {"id": h["id"]}).get("disease") or {}
-                if want in {str(x).upper() for x in d.get("dbXRefs") or []}:
-                    return {"id": h["id"], "name": d.get("name") or h.get("name"), "matched_by": "mesh"}
-    best = max(candidates, key=lambda h: max(_similar(h.get("name", ""), v) for v in name_variants(name)), default=None)
-    if best and max(_similar(best.get("name", ""), v) for v in name_variants(name)) >= 0.6:
+        if not want:
+            return None
+        for h in hits:
+            if not h.get("id") or h["id"] in checked:
+                continue
+            checked.add(h["id"])
+            d = _post(client, XREF_QUERY, {"id": h["id"]}).get("disease") or {}
+            if want in _xref_codes(d.get("dbXRefs")):
+                return {"id": h["id"], "name": d.get("name") or h.get("name"), "matched_by": "mesh"}
+        return None
+
+    for q in variants:
+        found = add(_search(client, q))
+        if found:
+            return found
+    found = add(_map_ids(client, variants))
+    if found:
+        return found
+
+    def sim(h: dict) -> float:
+        return max(_similar(h.get("name", ""), v) for v in variants)
+
+    exact = [h for h in candidates if any((h.get("name") or "").strip().lower() == v.lower() for v in variants)]
+    best = exact[0] if exact else max(candidates, key=sim, default=None)
+    if best and (exact or sim(best) >= 0.6):
         return {"id": best["id"], "name": best.get("name"), "matched_by": "ad"}
+    log.info("  Open Targets adayları (%d): %s", len(candidates), ", ".join(c.get("name", "") for c in candidates[:8]))
     return None
 
 
