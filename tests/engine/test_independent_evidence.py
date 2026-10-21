@@ -255,3 +255,22 @@ def test_opentargets_known_id_table_is_verified_before_use():
 
     assert opentargets.find_disease(Known(True), "Multiple Sclerosis", "MESH:D009103")["matched_by"] == "tablo"
     assert opentargets.find_disease(Known(False), "Multiple Sclerosis", "MESH:D009103") is None
+
+
+def test_opentargets_uses_parent_of_subtype_hits(monkeypatch):
+    monkeypatch.setattr(opentargets, "known_ids", lambda mesh_id: [])
+
+    class OnlySubtypes:
+        def request(self, method, url, json=None, **kwargs):
+            q = json["query"]
+            if "search(" in q:
+                return FakeResponse({"data": {"search": {"hits": [{"id": "EFO_RR", "name": "relapsing-remitting multiple sclerosis"}]}}})
+            if "parents" in q:
+                return FakeResponse({"data": {"disease": {"id": "EFO_RR", "parents": [
+                    {"id": "MONDO_0005301", "name": "multiple sclerosis", "dbXRefs": ["MESH:D009103"]}]}}})
+            if "mapIds" in q:
+                return FakeResponse({"data": {"mapIds": {"mappings": []}}})
+            return FakeResponse({"data": {"disease": {"id": json["variables"]["id"], "name": "x", "dbXRefs": []}}})
+
+    hit = opentargets.find_disease(OnlySubtypes(), "Multiple Sclerosis", "MESH:D009103")
+    assert hit == {"id": "MONDO_0005301", "name": "multiple sclerosis", "matched_by": "mesh-üst"}

@@ -171,3 +171,39 @@ def test_audit_rounds_reset_rate_on_new_label_schema_but_keep_exclusions():
     gate = benchmark.gate_1([{"base_ap": 0.3, "rrf_core_ap": 0.4, "frequency_ap": 0.1, "ltc_ap": 0.1}] * 4,
                             {"measured_as": "rrf_core"}, {"a": {"audit": old, "labels": {"schema": 4}}}, ["a"], n_boot=100)
     assert gate["checks"]["label_error"]["n_checked"] == 0  # eski şemanın denetimi kapıya sayılmaz
+
+
+def test_schema5_disease_must_be_named_and_not_a_different_disease():
+    ht = labels.vocabulary("Hypertension", "MESH:D006973")
+    ph = {"condition_mesh": ["D006973", "D006976"], "conditions": ["Pulmonary Arterial Hypertension"], "title": "X in PAH"}
+    eh = {"condition_mesh": ["D000075222", "D006973"], "conditions": ["Essential Hypertension"], "title": "X"}
+    assert not labels.trial_is_about(ph, "MESH:D006973", *ht) and labels.trial_is_about(eh, "MESH:D006973", *ht)
+    ra = labels.vocabulary("Arthritis, Rheumatoid", "MESH:D001172")
+    sj = {"condition_mesh": ["D012859", "D001172"], "conditions": ["Sjogren's Syndrome"], "title": "Y in Sjögren's"}
+    assert not labels.trial_is_about(sj, "MESH:D001172", *ra)
+    t2 = labels.vocabulary("Diabetes Mellitus, Type 2", "MESH:D003924")
+    assert labels.trial_is_about({"condition_mesh": ["D003924"], "conditions": ["T2DM"], "title": ""}, "MESH:D003924", *t2)
+    bh = labels.vocabulary("Behcet Syndrome", "MESH:D001528")
+    assert labels.trial_is_about({"condition_mesh": None, "conditions": ["Behçet's Disease"], "title": ""}, "MESH:D001528", *bh)
+    # bilinmeyen hastalık: sözlük yoksa adın kendisi
+    assert labels.vocabulary("Arthritis, Reactive", "MESH:D016918")[0] == ["reactive arthritis", "arthritis, reactive"]
+
+
+def test_schema5_excludes_comorbidity_vaccine_response_and_discontinuation():
+    assert labels.exclusion_reason({"title": "Iron Deficiency Anaemia in Heart Failure"}) == "comorbidity"
+    assert labels.exclusion_reason({"title": "Response to Zoster Vaccine in RA Patients on Tofacitinib"}) == "comorbidity"
+    assert labels.exclusion_reason({"title": "Methotrexate Discontinuation in Stable Crohn's"}) == "discontinuation"
+    assert labels.exclusion_reason({"title": "Active Immunotherapy With an Amyloid Vaccine in Alzheimer's Disease"}) == ""
+
+
+def test_gate_label_error_is_residual_after_audit_coverage():
+    src = {f"C{i}": {"nct": "N", "year": 2015} for i in range(10)}
+    rows = [{"base_ap": 0.3, "rrf_core_ap": 0.4, "frequency_ap": 0.1, "ltc_ap": 0.1}] * 4
+    half = {"labels_schema": 5, "n_checked": 5, "n_wrong": 1}
+    full = {"labels_schema": 5, "n_checked": 10, "n_wrong": 2}
+    lab = {"schema": 5, "first_trial_source": src}
+    g = benchmark.gate_1(rows, {"measured_as": "rrf_core"}, {"a": {"audit": half, "labels": lab}}, ["a"], n_boot=100)
+    le = g["checks"]["label_error"]
+    assert le["raw_error"] == 0.2 and le["coverage"] == 0.5 and le["value"] == 0.1 and not le["ok"]
+    g = benchmark.gate_1(rows, {"measured_as": "rrf_core"}, {"a": {"audit": full, "labels": lab}}, ["a"], n_boot=100)
+    assert g["checks"]["label_error"]["value"] == 0.0 and g["checks"]["label_error"]["ok"]

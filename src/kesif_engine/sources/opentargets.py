@@ -53,6 +53,12 @@ query Xrefs($id: String!) {
 }
 """
 
+PARENTS_QUERY = """
+query Parents($id: String!) {
+  disease(efoId: $id) { id parents { id name dbXRefs } }
+}
+"""
+
 ASSOC_QUERY = """
 query Assoc($id: String!, $index: Int!, $size: Int!) {
   disease(efoId: $id) {
@@ -180,6 +186,7 @@ def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[d
         d = _post(client, XREF_QUERY, {"id": oid}).get("disease") or {}
         if d.get("id") and (want in _xref_codes(d.get("dbXRefs")) or max(_similar(d.get("name", ""), v) for v in variants) >= 0.6):
             return {"id": d["id"], "name": d.get("name"), "matched_by": "tablo"}
+        log.info("  Open Targets tablo kimliği doğrulanamadı: %s → %s", oid, d.get("name") if d else "kayıt yok")
     for q in variants:
         found = add(_search(client, q))
         if found:
@@ -187,6 +194,15 @@ def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[d
     found = add(_map_ids(client, variants))
     if found:
         return found
+
+    # Arama yalnızca alt tipleri döndürdüyse (MS: "relapsing-remitting multiple sclerosis" vb.) asıl hastalık
+    # onların ortak üst kaydıdır: üst kayıtlardan MeSH kodu tutan seçilir.
+    if want:
+        for h in candidates[:10]:
+            d = _post(client, PARENTS_QUERY, {"id": h["id"]}).get("disease") or {}
+            for par in d.get("parents") or []:
+                if want in _xref_codes(par.get("dbXRefs")):
+                    return {"id": par["id"], "name": par.get("name"), "matched_by": "mesh-üst"}
 
     def sim(h: dict) -> float:
         return max(_similar(h.get("name", ""), v) for v in variants)

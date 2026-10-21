@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import numpy as np
 import pandas as pd
 
+from kesif_engine.evaluation import audit as label_audit
 from kesif_engine.evaluation.backtest import average_precision, backtest
 from kesif_engine.scoring import fusion
 
@@ -241,14 +242,26 @@ def gate_1(rows: List[dict], decision: dict, inputs: Dict[str, dict], fit_diseas
         # eski kayıtlar (şema alanı yok) ve etiket şeması değişmiş denetimler kapıya sayılmaz
         return a if ("labels_schema" not in a and schema is None) or a.get("labels_schema") == schema else {}
 
+    def _pool(d: str) -> int:
+        """Denetlenebilir pozitif havuzu: kaynak çalışması bilinen, MIN_YEAR ve sonrasında ilk kez denenen ilaçlar."""
+        src = ((inputs.get(d, {}).get("labels") or {}).get("first_trial_source")) or {}
+        return sum(1 for v in src.values() if (v.get("year") or 0) >= label_audit.MIN_YEAR)
+
     n_checked = sum(int(_audit(d).get("n_checked", 0)) for d in fit_diseases)
     n_wrong = sum(int(_audit(d).get("n_wrong", 0)) for d in fit_diseases)
-    audited = [d for d in fit_diseases if _audit(d).get("n_checked")]
-    error = (n_wrong / n_checked) if n_checked else None
+    pool = sum(_pool(d) for d in fit_diseases)
+    audited = [d for d in fit_diseases if _audit(d).get("n_checked") or not _pool(d)]
+    raw = (n_wrong / n_checked) if n_checked else None
+    # Yanlış bulunan satırlar ölçümden çıkarıldığı için ölçüme giren etiketlerdeki hata, denetlenmemiş kısımla sınırlıdır:
+    # kalan hata ≈ ham hata × (1 − kapsama). Havuzun tamamı denetlendiyse kalan hata yalnızca denetçi hatasıdır.
+    coverage = min(1.0, n_checked / pool) if pool else (1.0 if n_checked else 0.0)
+    residual = raw * (1.0 - coverage) if raw is not None else None
     checks["diseases"] = {"value": len(fit_diseases), "target": GATE1_MIN_DISEASES, "ok": len(fit_diseases) >= GATE1_MIN_DISEASES}
-    checks["label_error"] = {"value": round(error, 4) if error is not None else None, "n_checked": n_checked,
+    checks["label_error"] = {"value": round(residual, 4) if residual is not None else None,
+                             "raw_error": round(raw, 4) if raw is not None else None, "coverage": round(coverage, 4),
+                             "n_checked": n_checked, "n_wrong": n_wrong, "pool": pool,
                              "audited_diseases": len(audited), "target": GATE1_MAX_LABEL_ERROR,
-                             "ok": error is not None and error < GATE1_MAX_LABEL_ERROR and len(audited) == len(fit_diseases)}
+                             "ok": residual is not None and residual < GATE1_MAX_LABEL_ERROR and len(audited) == len(fit_diseases)}
     beats = {}
     for b in BASELINES:
         diffs = [r[f"{used}_ap"] - r[f"{b}_ap"] for r in rows if r.get(f"{b}_ap") is not None and r.get(f"{used}_ap") is not None]

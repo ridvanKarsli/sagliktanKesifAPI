@@ -18,6 +18,11 @@ ilaçları da girer). Bu modül iki temiz etiket kaynağı sağlar:
                 (midazolam, varfarin gibi ölçüm amaçlı ilaçlar "test edilen ilaç" değildir).
               - Nakil, CAR-T, gen ya da hücre tedavisi içeren çalışmalarda ilaçlar hazırlık/destek amaçlıdır; sayılmaz.
               - Sedasyon, anestezi, biyopsi, ön ilaçlama amaçlı çalışmalar sayılmaz.
+            Şema 5 (ikinci denetimde %19 hata): MeSH kodu tek başına yetmez. ClinicalTrials.gov pulmoner hipertansiyona
+              'Hypertension' kodu da atıyor, MeSH ağacı Sjögren'i romatoid artritin altına koyuyor. Çalışmanın hastalık
+              listesinde ya da başlığında hastalığın adı (resources/disease_terms.json) geçmeli ve ad başka bir
+              hastalığı belirtmemeli ("pulmonary hypertension"). Eşlik eden hastalık (anemi, depresyon, osteoporoz,
+              aşı yanıtı, enfeksiyon profilaksisi) ve ilaç bırakma/azaltma çalışmaları da sayılmaz.
   trials_late : aynı kurallarla, yalnızca faz 2 ve üstü çalışmalar (ikinci, daha katı etiket).
 
 Çıktı: data/<hastalık>/labels.json
@@ -29,7 +34,9 @@ import datetime
 import json
 import logging
 import re
-from typing import Optional
+import unicodedata
+from pathlib import Path
+from typing import Optional, Sequence
 
 from kesif_engine.core.net import HttpClient
 from kesif_engine.extraction.drugmap import DrugIndex
@@ -40,7 +47,7 @@ from kesif_engine.sources.clinicaltrials import fetch_trials, trial_counts
 
 log = logging.getLogger(__name__)
 _DOSE = re.compile(r"\b\d+(\.\d+)?\s*(mg|mcg|µg|ug|g|ml|%|iu|units?)\b.*$", re.I)
-SCHEMA = 4
+SCHEMA = 5
 
 
 def fetch_therapy_pmids(client: HttpClient, disease_query: str, start_year: int, end_year: int) -> list:
@@ -76,49 +83,117 @@ LATE_PHASES = {"PHASE2", "PHASE3", "PHASE4"}
 
 
 HEALTHY = re.compile(r"\bhealthy\s+(\w+\s+){0,3}(volunteers?|subjects?|participants?|adults?|males?|females?|men|women)\b", re.I)
+WITH_PATIENTS = re.compile(r"\bpatients?\b|\b(subjects?|participants?|adults?|men|women) with\b", re.I)
 PK_STUDY = re.compile(
     r"drug[- ]drug interaction|\bDDI\b|interaction (study|trial)|pharmacokinetic interaction|on the pharmacokinetics of"
-    r"|relative bioavailability|bioequivalence|food effect|mass balance|\bcocktail\b|thorough QT", re.I)
+    r"|relative bioavailability|bioequivalence|food effect|mass balance|\bcocktail\b|thorough QT|\bCYP\s?\d|cytochrome P450"
+    r"|single[- ]dose pharmacokinetics of|\bprobe (drug|substrate)|tryptophan depletion|airway responsiveness|bronchoprovocation"
+    r"|\bdeposition\b|\bdisposition\b|blood levels|drug levels|therapeutic drug monitoring", re.I)
 PROCEDURAL = re.compile(
     r"\ban(a)?esthe|\bsedation\b|\bsedative\b|for (a |the )?(muscle |skin |renal )?biopsy|premedication|neuromuscular block|bowel prep"
-    r"|colonoscopy|intubation", re.I)
+    r"|colonoscopy|intubation|capsule endoscopy|endoscopy preparation|perioperative|intraoperative|post-induction"
+    r"|infusion[- ](associated|related) reactions?|infusion reactions?|stellate ganglion|for imaging|nerve block|\bECMO\b|extracorporeal", re.I)
 SUPPORT_CONTEXT = re.compile(
-    r"transplant|stem[- ]cell|\bHSCT\b|\bCAR[- ]?T\b|chimeric antigen|gene therapy|\bAAV\d*\b|lymphodeplet|conditioning regimen", re.I)
+    r"transplant|stem[- ]cell|\bHSCT\b|\bCAR[- ]?T\b|chimeric antigen|gene therapy|\bAAV\d*\b|lymphodeplet|conditioning regimen"
+    r"|\b(NK|T)[- ]cells?\b|cell therapy|\bcells\b", re.I)
+# Müdahale adının kısaltılmış biçimleri ('GLP-1 analog' → 'GLP-1', 'Aldosterone antagonists' → 'Aldosterone') ancak
+# atılan kısım doz/form bilgisiyse kullanılır; atılan kısım ilacın sınıfını ya da başka bir maddeyi tarif ediyorsa
+# kısaltma yanlış ilaca eşler (denetimde görüldü: nikotinamid mononükleotid → niasinamid, Withania kökü → withanolid D).
+CLASS_TAIL = re.compile(
+    r"\b(inhibitors?|antagonists?|agonists?|analog(ue)?s?|blockers?|receptors?|mononucleotide|riboside|extracts?|roots?"
+    r"|powder|leaf|leaves|flakes|oil|class|derivatives?|modulators?|activators?|mimetics?|conjugates?|vaccines?)\b", re.I)
+# Tek başına yazıldığında bir ilaç değil ilaç SINIFI ya da enzim/hormon adı olan müdahaleler.
+CLASS_NAMES = {"antihistamine", "antihistamines", "biguanide", "biguanides", "thiazolidinedione", "thiazolidinediones",
+               "sulfonylurea", "sulfonylureas", "statin", "statins", "corticosteroid", "corticosteroids", "steroid",
+               "steroids", "nsaid", "nsaids", "ppi", "glp-1", "neprilysin", "aldosterone", "angiotensin ii",
+               "alpha-glucosidase inhibitor", "dpp-4 inhibitor", "sglt2 inhibitor", "insulin analog"}
 
 
-def disease_terms(name_en: str) -> list:
-    """Kodsuz kayıtlarda metin eşlemesi için ad biçimleri ('Arthritis, Rheumatoid' → 'rheumatoid arthritis')."""
-    name = (name_en or "").strip().lower()
-    out = [name]
+COMORBID = re.compile(
+    r"\ban(a)?emi|iron deficiency|\bdepress(ion|ive)\b|osteopor|bone (mineral )?density|bone loss|immunogenicity"
+    r"|responses? to (the )?([\w-]+ )?vaccin|influenza vaccin|zoster vaccin|pneumococcal|covid-19 vaccin|sars-cov-2 vaccin"
+    r"|hepatitis b|reactivation|clostridi|difficile|smoking|periodont|atheroscler|thromboprophylaxis"
+    r"|venous thromboembolism|cardiotoxicity|bacterial overgrowth|prophylaxis|chemoprevention|colorectal (cancer|neoplasia)"
+    r"|flushing|antiemetic|ovarian reserve|fertility preservation|\blipids?\b|cholesterol|carotid|atherosclerotic plaque|hyperuric"
+    r"|bone health|skeletal|ototoxicity|meibomian|overactive bladder", re.I)
+OTHER_DISEASE = re.compile(r"cancer|carcinoma|tumou?r|lymphoma|leuka?emia|melanoma|sarcoma|neoplasm|myeloma", re.I)
+BLOOD_PRESSURE = re.compile(r"blood pressure|hypertensi", re.I)
+DISCONTINUE = re.compile(r"\bdiscontinu|withdrawal of|\btaper(ing)?\b|de-?escalat|dose reduction|\bstopping\b", re.I)
+TERMS_FILE = Path(__file__).resolve().parents[1] / "resources" / "disease_terms.json"
+
+
+def _norm(text: str) -> str:
+    text = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"\s+", " ", re.sub(r"['’]s\b", "", text)).strip()
+
+
+def disease_terms(name_en: str, mesh_id: str = "") -> list:
+    """Hastalığın adları: elle derlenmiş sözlük (disease_terms.json) varsa o, yoksa adın doğal ve MeSH sırası."""
+    return vocabulary(name_en, mesh_id)[0]
+
+
+def vocabulary(name_en: str, mesh_id: str = "") -> tuple:
+    """(terimler, dışlanan nitelemeler)."""
+    try:
+        table = json.loads(TERMS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        table = {}
+    code = (mesh_id or "").split(":")[-1].strip().upper()
+    entry = table.get(f"MESH:{code}") if code else None
+    if entry:
+        return [_norm(t) for t in entry.get("terms") or []], [_norm(t) for t in entry.get("exclude") or []]
+    name = _norm(name_en)
+    out = [name] if name else []
     if "," in name:
         head, tail = name.split(",", 1)
         out.insert(0, f"{tail.strip()} {head.strip()}")
-    return [x.replace("'s", "") for x in out if x]
+    return out, []
 
 
-def trial_is_about(trial: dict, mesh_id: str, terms: list) -> bool:
-    """Çalışma hedef hastalığa (ya da alt tipine) mı ait? MeSH kodu varsa yalnızca kod; yoksa ad eşlemesi."""
+def names_disease(text: str, terms: list, exclude: Sequence[str] = ()) -> bool:
+    """Metin hedef hastalığı adlandırıyor mu? ('pulmonary hypertension' hipertansiyonu adlandırmaz.)"""
+    t = _norm(text)
+    if not t or any(x in t for x in exclude):
+        return False
+    return any(re.search(rf"\b{re.escape(term)}s?\b", t) for term in terms)
+
+
+def trial_is_about(trial: dict, mesh_id: str, terms: list, exclude: Sequence[str] = ()) -> bool:
+    """Çalışma hedef hastalığa mı ait? MeSH kodu (ya da üst kodu) tutmalı VE hastalık listesinden biri ya da başlık
+    hastalığı adlandırmalı. Kod yoksa yalnızca ad. Terim listesi boşsa ad koşulu aranmaz."""
     code = (mesh_id or "").split(":")[-1].strip().upper()
     mesh = trial.get("condition_mesh")
-    if code and mesh:
-        return code in {str(m).upper() for m in mesh}
+    if code and mesh and code not in {str(m).upper() for m in mesh}:
+        return False
     if not terms:
-        return True
-    text = " ".join([trial.get("title") or ""] + list(trial.get("conditions") or [])).lower().replace("'s", "")
-    return any(t in text for t in terms)
+        return bool(code and mesh) or not code
+    texts = list(trial.get("conditions") or []) + [trial.get("title") or ""]
+    return any(names_disease(x, terms, exclude) for x in texts)
 
 
-def exclusion_reason(trial: dict) -> str:
-    """Çalışma etiket için uygun değilse nedeni; uygunsa ''."""
+def exclusion_reason(trial: dict, terms: Sequence[str] = ()) -> str:
+    """Çalışma etiket için uygun değilse nedeni; uygunsa ''. terms: hedef hastalığın adları (hedefe göre kurallar:
+    kanser başlıklı çalışma kanser olmayan hedefe, kan basıncı çalışması hipertansiyon olmayan hedefe sayılmaz)."""
     title = trial.get("title") or ""
-    if (trial.get("healthy_volunteers") and _phase_rank(trial.get("phases")) <= 1) or HEALTHY.search(title):
+    target = " ".join(terms)
+    mixed = WITH_PATIENTS.search(title)
+    if (trial.get("healthy_volunteers") and _phase_rank(trial.get("phases")) <= 1 and not mixed) or (HEALTHY.search(title) and not mixed):
         return "healthy"
     if PK_STUDY.search(title):
         return "pk"
     if PROCEDURAL.search(title):
         return "procedural"
-    if SUPPORT_CONTEXT.search(title) or any(t in ("GENETIC", "PROCEDURE", "BIOLOGICAL") and SUPPORT_CONTEXT.search(n)
-                                            for t, n in trial.get("interventions") or []):
+    if COMORBID.search(title):
+        return "comorbidity"
+    if target and BLOOD_PRESSURE.search(title) and not BLOOD_PRESSURE.search(target):
+        return "comorbidity"
+    if target and not OTHER_DISEASE.search(target) and OTHER_DISEASE.search(" ".join([title] + list(trial.get("conditions") or []))):
+        return "other_disease"
+    if DISCONTINUE.search(title):
+        return "discontinuation"
+    ints = trial.get("interventions") or []
+    if SUPPORT_CONTEXT.search(title) or any(t == "GENETIC" or (t in ("PROCEDURE", "BIOLOGICAL") and SUPPORT_CONTEXT.search(n))
+                                            for t, n in ints):
         return "support"
     return ""
 
@@ -149,7 +224,12 @@ def trial_drugs(trial: dict, index: DrugIndex, canonical: dict, excluded: set) -
     for itype, name in trial.get("interventions") or []:
         if itype not in DRUG_TYPES or PLACEBO.search(name):
             continue
-        hit = index.match(intervention_candidates(name))
+        cands = intervention_candidates(name)
+        if CLASS_TAIL.search(_DOSE.sub("", name)):
+            cands = cands[:1]  # yalnızca tam ad; kısaltma sınıf/başka madde tarifini atar
+        if _norm(cands[0] if cands else "") in CLASS_NAMES:
+            continue
+        hit = index.match(cands)
         if not hit:
             continue
         hit = canonical.get(hit, hit)
@@ -162,6 +242,16 @@ def trial_drugs(trial: dict, index: DrugIndex, canonical: dict, excluded: set) -
         if exp and low not in exp:
             continue
         found.setdefault(hit, name)
+    # Birden çok kolda HER kolda bulunan ilaç, kollar arasında başka bir ilaç farkı varsa, karşılaştırılan değil ortak
+    # zemindir (kolların tamamı "deneysel" işaretli olsa bile: idebenon + haloperidol / idebenon + deutetrabenazin).
+    arm_sets = [{n.lower() for n in a.get("names") or []} for a in arms if a.get("names")]
+    if len(arm_sets) >= 2:
+        everywhere = set.intersection(*arm_sets)
+        varying = {n for n in set.union(*arm_sets) - everywhere if not PLACEBO.search(n)}
+        if varying:
+            for k, v in list(found.items()):
+                if v.lower() in everywhere:
+                    comparator_ids.add(k)
     # aynı ilaç hem deneysel hem karşılaştırma kolunda (farklı yazımlarla) → arka plan tedavisi
     return {k: v for k, v in found.items() if k not in comparator_ids}
 
@@ -182,6 +272,7 @@ def map_trials_to_drugs(trials: list, drugs: list, min_phase: float, with_source
     canonical = canonical_ids(drugs)
     excluded = {canonical.get(d["chembl_id"], d["chembl_id"]) for d in eligible
                 if drugspace.classify(d, d.get("name", "")) == drugspace.KIND_DIAGNOSTIC}
+    terms, exclude = vocabulary(name_en, mesh_id) if (name_en or mesh_id) else ([], [])
     first: dict = {}
     late: dict = {}
     sources: dict = {}
@@ -190,8 +281,8 @@ def map_trials_to_drugs(trials: list, drugs: list, min_phase: float, with_source
             continue
         if len(t.get("conditions") or []) > MAX_CONDITIONS:
             continue
-        reason = "" if trial_is_about(t, mesh_id, disease_terms(name_en)) else "other_disease"
-        reason = reason or exclusion_reason(t)
+        reason = "" if trial_is_about(t, mesh_id, terms, exclude) else "other_disease"
+        reason = reason or exclusion_reason(t, terms)
         if reason:
             if stats is not None:
                 stats[reason] = stats.get(reason, 0) + 1
