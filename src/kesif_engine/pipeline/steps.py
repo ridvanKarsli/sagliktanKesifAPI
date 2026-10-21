@@ -157,7 +157,7 @@ def step_labels(disease: str, force: bool = False, start_year: int = 1990) -> di
         if existing.get("schema", 1) >= labels.SCHEMA:
             log.info("Etiketler zaten var: %s", out)
             return {"n_therapy": len(existing.get("therapy_pmids", []))}
-        log.info("Etiketler eski şemada (tüm kollar); deneysel kol ve çalışma türü bilgisiyle yenileniyor.")
+        log.info("Etiketler eski şemada (%s < %s); güncel kurallarla yenileniyor.", existing.get("schema", 1), labels.SCHEMA)
     lab = labels.build(HttpClient(), cfg, chembl.load(), config.MIN_PHASE, start_year, out)
     _mark(disease, "labels", n_therapy=len(lab["therapy_pmids"]), n_trials=len(lab["trials"]))
     return {"n_therapy": len(lab["therapy_pmids"]), "n_trials": len(lab["trials"])}

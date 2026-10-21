@@ -13,6 +13,7 @@ CT_URL = "https://clinicaltrials.gov/api/v2/studies"
 # Alan listesi: API bir ad kümesini reddederse (HTTP 400) sırayla sonrakine düşülür. En sonuncusu eski (şema 1) listedir;
 # kol bilgisi gelmez ama iş durmaz (etiket kalitesi düşer, günlükte uyarı verilir).
 CT_FIELD_SETS = [
+    "protocolSection.identificationModule,protocolSection.statusModule.startDateStruct,protocolSection.designModule,protocolSection.armsInterventionsModule,protocolSection.conditionsModule,protocolSection.eligibilityModule.healthyVolunteers,derivedSection.conditionBrowseModule",
     "protocolSection.identificationModule.nctId,protocolSection.statusModule.startDateStruct,protocolSection.designModule,protocolSection.armsInterventionsModule,protocolSection.conditionsModule",
     "protocolSection.identificationModule.nctId,protocolSection.statusModule.startDateStruct,protocolSection.designModule,protocolSection.armsInterventionsModule",
     "NCTId,StartDate,StudyType,DesignPrimaryPurpose,Phase,ArmGroupType,ArmGroupInterventionNames,InterventionName,InterventionType",
@@ -43,8 +44,13 @@ def _strip_arm_prefix(name: str) -> str:
 
 def parse_trials(payload: dict) -> list:
     """ClinicalTrials.gov v2 yanıtından çalışma kayıtları:
-    {nct, start_year, study_type, purpose, phases, interventions:[(type, name)], experimental:[name],
-     arms:[{type, names}], conditions:[ad]}
+    {nct, title, start_year, study_type, purpose, phases, interventions:[(type, name)], experimental:[name],
+     arms:[{type, names}], conditions:[ad], condition_mesh:[MeSH], healthy_volunteers}
+
+    condition_mesh: ClinicalTrials.gov'un çalışmanın hastalıklarına atadığı MeSH kodları ve bunların üst kodları
+    (derivedSection.conditionBrowseModule). Hastalık araması bulanık eşleştiği için (FMF araması Behçet çalışmalarını,
+    hipertansiyon araması pulmoner hipertansiyonu getirir) çalışmanın gerçekten hedef hastalıkla ilgili olup olmadığı
+    bu kodlarla denetlenir (labels.trial_is_about).
 
     experimental: DENEYSEL kollarda kullanılan müdahale adları (kol bilgisi yoksa boş; eşleme tüm müdahalelere düşer).
     arms: kolların türü ve içerdiği müdahaleler; bir ilacın karşılaştırma/plasebo kolunda da bulunması onun test edilen
@@ -53,7 +59,12 @@ def parse_trials(payload: dict) -> list:
     out = []
     for study in payload.get("studies", []):
         ps = study.get("protocolSection", {}) or {}
-        nct = (ps.get("identificationModule") or {}).get("nctId", "")
+        idm = ps.get("identificationModule") or {}
+        nct = idm.get("nctId", "")
+        browse = (study.get("derivedSection") or {}).get("conditionBrowseModule")
+        mesh = None
+        if browse is not None:
+            mesh = sorted({str(m.get("id")) for key in ("meshes", "ancestors") for m in browse.get(key) or [] if m.get("id")})
         start = ((ps.get("statusModule") or {}).get("startDateStruct") or {}).get("date")
         design = ps.get("designModule") or {}
         ami = ps.get("armsInterventionsModule") or {}
@@ -74,6 +85,7 @@ def parse_trials(payload: dict) -> list:
                         experimental.append(n)
         out.append({
             "nct": nct,
+            "title": idm.get("officialTitle") or idm.get("briefTitle") or "",
             "start_year": _year(start),
             "study_type": (design.get("studyType") or "").upper(),
             "purpose": ((design.get("designInfo") or {}).get("primaryPurpose") or "").upper(),
@@ -82,6 +94,8 @@ def parse_trials(payload: dict) -> list:
             "experimental": experimental,
             "arms": arms,
             "conditions": [str(c) for c in ((ps.get("conditionsModule") or {}).get("conditions") or [])],
+            "condition_mesh": mesh,
+            "healthy_volunteers": (ps.get("eligibilityModule") or {}).get("healthyVolunteers"),
         })
     return out
 

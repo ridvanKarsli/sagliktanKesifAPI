@@ -126,3 +126,48 @@ def test_gate_1_needs_diseases_audit_and_baselines():
     assert not g["passed"] and g["missing"] == ["diseases"]
     g2 = benchmark.gate_1(rows, decision, {"a": {}, "b": {}}, ["a", "b"], n_boot=200)
     assert not g2["checks"]["label_error"]["ok"]
+
+
+def test_schema4_trial_must_belong_to_target_disease():
+    payload = {"studies": [{
+        "protocolSection": {"identificationModule": {"nctId": "NCT20", "briefTitle": "Anakinra in Behcet's Disease"},
+                            "conditionsModule": {"conditions": ["Behcet Syndrome"]}},
+        "derivedSection": {"conditionBrowseModule": {"meshes": [{"id": "D001528", "term": "Behcet Syndrome"}],
+                                                     "ancestors": [{"id": "D014657", "term": "Vasculitis"}]}}}]}
+    t = clinicaltrials.parse_trials(payload)[0]
+    assert t["condition_mesh"] == ["D001528", "D014657"] and t["title"].startswith("Anakinra")
+    assert labels.trial_is_about(t, "MESH:D001528", labels.disease_terms("Behcet Syndrome"))
+    assert not labels.trial_is_about(t, "MESH:D010505", labels.disease_terms("Familial Mediterranean Fever"))
+    # alt tip: üst kodlar da sayılır (lupus nefriti → SLE)
+    assert labels.trial_is_about({"condition_mesh": ["D008181", "D008180"]}, "MESH:D008180", [])
+    # kod yoksa ad eşlemesi, ters çevrilmiş MeSH adı doğal sıraya çevrilir
+    t2 = {"condition_mesh": None, "title": "", "conditions": ["Rheumatoid Arthritis"]}
+    assert labels.trial_is_about(t2, "MESH:D001172", labels.disease_terms("Arthritis, Rheumatoid"))
+
+
+def test_schema4_excludes_healthy_pk_procedural_and_support_trials():
+    base = {"phases": ["PHASE1"], "interventions": []}
+    assert labels.exclusion_reason({**base, "title": "A Study of X", "healthy_volunteers": True}) == "healthy"
+    assert labels.exclusion_reason({**base, "phases": ["PHASE3"], "title": "X in Healthy Adult Volunteers"}) == "healthy"
+    assert labels.exclusion_reason({**base, "phases": ["PHASE3"], "title": "A Study of X", "healthy_volunteers": True}) == ""
+    assert labels.exclusion_reason({"title": "Drug-Drug Interaction of X With Midazolam"}) == "pk"
+    assert labels.exclusion_reason({"title": "Ketamine Sedation for Muscle Biopsy"}) == "procedural"
+    assert labels.exclusion_reason({"title": "Efficacy in Biopsy-Confirmed NASH"}) == ""
+    assert labels.exclusion_reason({"title": "Tolerance", "interventions": [("PROCEDURE", "Stem cell transplantation"), ("DRUG", "Melphalan")]}) == "support"
+    assert labels.exclusion_reason({"title": "Phase 3 Study of Apremilast", "interventions": [("DRUG", "Apremilast")]}) == ""
+
+
+def test_audit_rounds_reset_rate_on_new_label_schema_but_keep_exclusions():
+    old = audit.read_marked("chembl_id;dogru_mu\nC1;hayır\nC2;evet\n", labels_schema=3)
+    new = audit.read_marked("chembl_id;dogru_mu\nC3;evet\nC4;evet\n", labels_schema=4)
+    m = audit.merge(old, new)
+    assert m["n_checked"] == 2 and m["n_wrong"] == 0 and m["history"][0]["error_rate"] == 0.5
+    assert audit.excluded_ids(m) == {"C1"} and m["checked_ids"] == ["C1", "C2", "C3", "C4"]
+    same = audit.merge(m, audit.read_marked("chembl_id;dogru_mu\nC5;hayır\n", labels_schema=4))
+    assert same["n_checked"] == 3 and same["n_wrong"] == 1
+    lab = {"first_trial_source": {f"C{i}": {"nct": "N", "year": 2015} for i in range(1, 8)}}
+    rows = audit.sample(lab, [], n=10, skip=set(same["checked_ids"]))
+    assert {r["chembl_id"] for r in rows} == {"C6", "C7"}
+    gate = benchmark.gate_1([{"base_ap": 0.3, "rrf_core_ap": 0.4, "frequency_ap": 0.1, "ltc_ap": 0.1}] * 4,
+                            {"measured_as": "rrf_core"}, {"a": {"audit": old, "labels": {"schema": 4}}}, ["a"], n_boot=100)
+    assert gate["checks"]["label_error"]["n_checked"] == 0  # eski şemanın denetimi kapıya sayılmaz

@@ -90,15 +90,17 @@ def export_label_audit(key: str, n: int = 50) -> str:
         raise FileNotFoundError(f"{key}: doğrulama etiketi yok; önce analizi çalıştırın.")
     if lab.get("schema", 1) < labels.SCHEMA or not lab.get("first_trial_source"):
         raise ValueError(f"{key}: etiketler eski şemada (kaynak çalışma bilgisi yok); analizi 'Doğrulama verileri' adımıyla yenileyin.")
-    return audit.to_csv(audit.sample(lab, chembl.load(), n))
+    done = set(audit.load(workdir(key)).get("checked_ids") or [])
+    return audit.to_csv(audit.sample(lab, chembl.load(), n, skip=done))
 
 
 def import_label_audit(key: str, text: str) -> dict:
     """İşaretlenmiş CSV'yi okur, önceki turlarla birleştirir ve kaydeder."""
-    from kesif_engine.evaluation import audit
+    from kesif_engine.evaluation import audit, labels
 
     wd = workdir(key)
-    merged = audit.merge(audit.load(wd), audit.read_marked(text))
+    schema = labels.load(wd / "labels.json").get("schema")
+    merged = audit.merge(audit.load(wd), audit.read_marked(text, labels_schema=schema))
     audit.save(wd, merged)
     log.info("%s etiket denetimi: %d satır, %d yanlış (hata %s)", key, merged["n_checked"], merged["n_wrong"], merged["error_rate"])
     return merged

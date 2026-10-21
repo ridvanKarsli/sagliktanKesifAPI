@@ -234,9 +234,16 @@ def gate_1(rows: List[dict], decision: dict, inputs: Dict[str, dict], fit_diseas
     """
     used = decision.get("measured_as") or "base"
     checks: Dict[str, Any] = {}
-    n_checked = sum(int((inputs.get(d, {}).get("audit") or {}).get("n_checked", 0)) for d in fit_diseases)
-    n_wrong = sum(int((inputs.get(d, {}).get("audit") or {}).get("n_wrong", 0)) for d in fit_diseases)
-    audited = [d for d in fit_diseases if (inputs.get(d, {}).get("audit") or {}).get("n_checked")]
+    def _audit(d: str) -> dict:
+        inp = inputs.get(d, {})
+        a = inp.get("audit") or {}
+        schema = (inp.get("labels") or {}).get("schema")
+        # eski kayıtlar (şema alanı yok) ve etiket şeması değişmiş denetimler kapıya sayılmaz
+        return a if ("labels_schema" not in a and schema is None) or a.get("labels_schema") == schema else {}
+
+    n_checked = sum(int(_audit(d).get("n_checked", 0)) for d in fit_diseases)
+    n_wrong = sum(int(_audit(d).get("n_wrong", 0)) for d in fit_diseases)
+    audited = [d for d in fit_diseases if _audit(d).get("n_checked")]
     error = (n_wrong / n_checked) if n_checked else None
     checks["diseases"] = {"value": len(fit_diseases), "target": GATE1_MIN_DISEASES, "ok": len(fit_diseases) >= GATE1_MIN_DISEASES}
     checks["label_error"] = {"value": round(error, 4) if error is not None else None, "n_checked": n_checked,
