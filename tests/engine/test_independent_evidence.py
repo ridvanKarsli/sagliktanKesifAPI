@@ -274,3 +274,17 @@ def test_opentargets_uses_parent_of_subtype_hits(monkeypatch):
 
     hit = opentargets.find_disease(OnlySubtypes(), "Multiple Sclerosis", "MESH:D009103")
     assert hit == {"id": "MONDO_0005301", "name": "multiple sclerosis", "matched_by": "mesh-üst"}
+
+
+def test_accel_channel_rewards_rising_interest_not_total_popularity():
+    from kesif_engine.scoring.features import _accel
+    assert _accel(0, 50) == 0.0                      # son yıllarda anılmayan: kanıt yok
+    assert _accel(8, 10) > _accel(8, 200)            # aynı yeni ilgi, az geçmiş → daha hızlı yükseliş
+    assert _accel(10, 10) > _accel(2, 2) > 0         # tamamen yeni ilgi, büyüklükle artar
+
+
+def test_benchmark_scores_rrf_ivme_from_accel_and_lit():
+    from kesif_engine.evaluation import benchmark as bm
+    f = pd.DataFrame({"base": [1.0, 0.0], "lit": [0.0, 1.0], "accel": [2.0, 0.0], "penalty": [1.0, 1.0]}, index=["X", "Y"])
+    s = bm._score("rrf_ivme", f)
+    assert s["X"] > 0 and s["Y"] > 0 and abs(s["X"] - s["Y"]) < 1e-12

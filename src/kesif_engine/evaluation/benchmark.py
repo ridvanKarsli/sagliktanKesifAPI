@@ -8,6 +8,7 @@ Karşılaştırılan sıralamalar:
     base       mevcut yöntem puanı (literatür köprüsü + mekanizma, zarar cezasıyla)
     rrf_core   literatür kanallarının sıra birleştirmesi (lit, mech, direct, recent)
     rrf_all    tüm mevcut kanallar (genetik, biyoloji, ağ dahil; varsa)
+    rrf_ivme   kanıt ivmesi + dolaylı literatür bağı (accel, lit)
     logistic   öğrenen birleştirme; her hastalık için o hastalık EĞİTİMDEN ÇIKARILARAK ölçülür (leave-one-disease-out)
 
 Karar kuralı (değişiklik ancak kanıtla):
@@ -37,7 +38,8 @@ CUTOFFS = (2012, 2015, 2018)
 SCHEME_PREFERENCE = ("trials", "therapy", "mentions")
 SECONDARY_SCHEME = "trials_late"
 CORE_CHANNELS = ["lit", "mech", "direct", "recent"]
-LOGISTIC_FEATURES = ["lit", "mech", "direct", "recent", "genetic", "biology", "network", "prevalence"]
+ACCEL_CHANNELS = ["accel", "lit"]
+LOGISTIC_FEATURES = ["lit", "mech", "direct", "recent", "accel", "genetic", "biology", "network", "prevalence"]
 N_BOOT = 2000
 SEED = 7
 MIN_DISEASES = 2
@@ -106,6 +108,8 @@ def _score(method: str, f: pd.DataFrame, model: Optional[fusion.LogisticFusion] 
         return f["base"]
     if method == "rrf_core":
         return fusion.rrf(f, CORE_CHANNELS) * f["penalty"]
+    if method == "rrf_ivme":
+        return fusion.rrf(f, ACCEL_CHANNELS) * f["penalty"]
     if method == "rrf_all":
         return fusion.rrf(f, fusion.available(f)) * f["penalty"]
     if method == "logistic" and model is not None:
@@ -118,20 +122,27 @@ def _labels(g: dict) -> pd.Series:
 
 
 def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, n_boot: int = N_BOOT,
-        progress: Optional[Callable[[str], None]] = None) -> dict:
-    """Ölçümü yapar; {"decision": {...}, "scorecard": {...}, "diseases": {...}} döndürür (JSON'a uygun)."""
+        progress: Optional[Callable[[str], None]] = None, final: Iterable[str] = ()) -> dict:
+    """Ölçümü yapar; {"decision": {...}, "scorecard": {...}, "diseases": {...}} döndürür (JSON'a uygun).
+
+    final: kesin doğrulama hastalıkları. Ne karara ne kontrol (hold-out) incelemesine girer; yöntem tasarlanırken hiç
+    bakılmamış olmaları gerekir. Karar verildikten sonra seçilen yöntem bir kez bunlarda sıklık sıralamasıyla
+    karşılaştırılır (Kapı 1'in son koşulu)."""
     all_groups = collect_groups(inputs, cutoffs, progress=progress)
+    final_set = set(final)
+    final_groups = [g for g in all_groups if g["disease"] in final_set and not g.get("secondary")]
+    all_groups = [g for g in all_groups if g["disease"] not in final_set]
     groups = [g for g in all_groups if not g.get("secondary")]
     hold = {d for d in hold_out if d in {g["disease"] for g in groups}}
     fit_groups = [g for g in groups if g["disease"] not in hold]
     fit_secondary = [g for g in all_groups if g.get("secondary") and g["disease"] not in hold]
     fit_diseases = sorted({g["disease"] for g in fit_groups})
     has_external = any(set(g["channels"]) & {"genetic", "biology", "network"} for g in fit_groups)
-    methods = ["base", "rrf_core"] + (["rrf_all"] if has_external else [])
+    methods = ["base", "rrf_core", "rrf_ivme"] + (["rrf_all"] if has_external else [])
     can_learn = len(fit_diseases) >= MIN_DISEASES
     if can_learn:
         methods.append("logistic")
-    names = [n for n in LOGISTIC_FEATURES if n in ("lit", "mech", "direct", "recent", "prevalence") or has_external]
+    names = [n for n in LOGISTIC_FEATURES if n in ("lit", "mech", "direct", "recent", "accel", "prevalence") or has_external]
 
     models: Dict[str, Optional[fusion.LogisticFusion]] = {}
     for d in fit_diseases:
@@ -150,6 +161,7 @@ def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, 
     decision = _decide(scorecard, methods, rows, fit_diseases, fit_groups, names, has_external, scorecard_secondary)
     if hold and decision["method"] != "base":
         decision["hold_out"] = _evaluate_hold_out(decision, [g for g in groups if g["disease"] in hold])
+    final_check = final_confirmation(decision, final_groups, n_boot) if final_set else None
 
     diseases_out: Dict[str, dict] = {}
     for d in sorted({g["disease"] for g in groups}):
@@ -176,7 +188,9 @@ def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, 
         "secondary_scheme": SECONDARY_SCHEME if scorecard_secondary else None,
         "scorecard_secondary": scorecard_secondary,
         "decision": decision,
-        "gate_1": gate_1(rows, decision, inputs, fit_diseases, n_boot),
+        "final_diseases": sorted(final_set),
+        "final_check": final_check,
+        "gate_1": gate_1(rows, decision, inputs, fit_diseases, n_boot, final_check if final_set else None),
         "diseases": diseases_out,
     }
 
@@ -227,7 +241,28 @@ GATE1_MIN_DISEASES = 25
 GATE1_MAX_LABEL_ERROR = 0.05
 
 
-def gate_1(rows: List[dict], decision: dict, inputs: Dict[str, dict], fit_diseases: List[str], n_boot: int = N_BOOT) -> dict:
+def final_confirmation(decision: dict, groups: List[dict], n_boot: int = N_BOOT) -> dict:
+    """Seçilen yöntem, karara ve kontrol incelemesine hiç girmemiş hastalıklarda sıklık sıralamasını geçiyor mu?
+    Ölçüt önceden konmuştur: fark (seçilen − sıklık) %90 güven aralığının alt sınırı sıfırın üstünde olmalı."""
+    rows = []
+    for g in groups:
+        f = g["features"]
+        chosen = fusion.fused_score(f, decision)
+        rows.append({"disease": g["disease"], "cutoff": g["cutoff"], "n_positives": len(g["positives"]),
+                     "chosen_ap": round(average_precision(chosen, g["positives"]), 4),
+                     "base_ap": round(average_precision(f["base"], g["positives"]), 4),
+                     "frequency_ap": g["frequency_ap"], "random_ap": g["random_ap"]})
+    if not rows:
+        return {"ok": False, "groups": [], "note": "Doğrulama hastalıklarında ölçülebilir grup yok."}
+    vs_freq = bootstrap_mean_ci([r["chosen_ap"] - r["frequency_ap"] for r in rows], n_boot)
+    vs_base = bootstrap_mean_ci([r["chosen_ap"] - r["base_ap"] for r in rows], n_boot)
+    return {"ok": vs_freq["lo"] is not None and vs_freq["lo"] > 0, "method": decision.get("measured_as") or "base",
+            "diseases": sorted({r["disease"] for r in rows}), "groups": rows, "vs_frequency": vs_freq, "vs_base": vs_base,
+            "mean_chosen_ap": _mean([r["chosen_ap"] for r in rows]), "mean_frequency_ap": _mean([r["frequency_ap"] for r in rows])}
+
+
+def gate_1(rows: List[dict], decision: dict, inputs: Dict[str, dict], fit_diseases: List[str], n_boot: int = N_BOOT,
+           final_check: Optional[dict] = None) -> dict:
     """Faz 1 kapısı: yeterli hastalık, denetlenmiş etiket ve kullanılan yöntemin tüm taban çizgilerini geçmesi.
 
     Etiket hatası, elle denetlenen örneklerden (data/<hastalık>/label_audit.json) hesaplanır; denetim yoksa kapı
@@ -269,6 +304,11 @@ def gate_1(rows: List[dict], decision: dict, inputs: Dict[str, dict], fit_diseas
             ci = bootstrap_mean_ci(diffs, n_boot)
             beats[b] = {**ci, "ok": ci["lo"] is not None and ci["lo"] > 0}
     checks["beats_baselines"] = {"method": used, "baselines": beats, "ok": bool(beats) and all(v["ok"] for v in beats.values())}
+    if final_check is not None:
+        fc = final_check.get("vs_frequency") or {}
+        checks["final_confirmation"] = {"ok": bool(final_check.get("ok")), "diseases": final_check.get("diseases", []),
+                                        "mean": fc.get("mean"), "lo": fc.get("lo"), "hi": fc.get("hi"),
+                                        "note": final_check.get("note")}
     passed = all(c["ok"] for c in checks.values())
     missing = [k for k, c in checks.items() if not c["ok"]]
     return {"passed": passed, "checks": checks, "missing": missing}
@@ -302,7 +342,8 @@ def _decide(scorecard: dict, methods: List[str], rows: List[dict], fit_diseases:
             if m == "logistic":
                 model = fusion.LogisticFusion(names).fit([g["features"] for g in fit_groups], [_labels(g) for g in fit_groups])
                 return {**out, "method": "logistic", "model": model.to_dict(), "weights": model.explain()}
-            channels = CORE_CHANNELS if m == "rrf_core" else sorted({c for g in fit_groups for c in g["channels"]},
+            fixed = {"rrf_core": CORE_CHANNELS, "rrf_ivme": ACCEL_CHANNELS}
+            channels = fixed[m] if m in fixed else sorted({c for g in fit_groups for c in g["channels"]},
                                                                    key=list(fusion.CHANNELS).index)
             return {**out, "method": "rrf", "channels": channels}
     best = ranked[0] if ranked else None

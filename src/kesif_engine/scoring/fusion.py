@@ -193,8 +193,8 @@ def apply_to_candidates(ranked: pd.DataFrame, features: pd.DataFrame, decision: 
     method = (decision or {}).get("method", "base")
     fused = fused_score(features, decision).reindex(keys).fillna(0.0)
     out["method_score"] = out["score"]
-    for ch in ("direct", "recent", "genetic", "biology", "network"):
-        out[f"{ch}_score"] = f[ch].round(4).to_numpy()
+    for ch in ("direct", "recent", "accel", "genetic", "biology", "network"):
+        out[f"{ch}_score"] = f[ch].round(4).to_numpy() if ch in f.columns else 0.0
     out["n_channels"] = (f[list(c for c in CHANNELS if c in f.columns)] > 0).sum(axis=1).astype(int).to_numpy()
     out["fusion"] = method
     if method != "base":

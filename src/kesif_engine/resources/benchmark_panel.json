@@ -254,5 +254,59 @@
   "mesh_id": "MESH:D004715",
   "pubmed_query": "\"Endometriosis\"[MeSH Terms]",
   "hold_out": true
+ },
+ {
+  "key": "osteoarthritis",
+  "label": "Osteoartrit",
+  "name_en": "Osteoarthritis",
+  "mesh_id": "MESH:D010003",
+  "pubmed_query": "\"Osteoarthritis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "alopecia-areata",
+  "label": "Alopesi areata",
+  "name_en": "Alopecia Areata",
+  "mesh_id": "MESH:D000506",
+  "pubmed_query": "\"Alopecia Areata\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "pbc",
+  "label": "Primer biliyer kolanjit",
+  "name_en": "Liver Cirrhosis, Biliary",
+  "mesh_id": "MESH:D008105",
+  "pubmed_query": "\"Liver Cirrhosis, Biliary\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "pcos",
+  "label": "Polikistik over sendromu",
+  "name_en": "Polycystic Ovary Syndrome",
+  "mesh_id": "MESH:D011085",
+  "pubmed_query": "\"Polycystic Ovary Syndrome\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "migraine",
+  "label": "Migren",
+  "name_en": "Migraine Disorders",
+  "mesh_id": "MESH:D008881",
+  "pubmed_query": "\"Migraine Disorders\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "vitiligo",
+  "label": "Vitiligo",
+  "name_en": "Vitiligo",
+  "mesh_id": "MESH:D014820",
+  "pubmed_query": "\"Vitiligo\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
  }
 ]

@@ -229,6 +229,13 @@ def benchmark(diseases: Optional[List[str]] = typer.Option(None, "--disease", "-
                    f" ({le['n_checked']} satır, {le['audited_diseases']} hastalık denetlendi; hedef < {le['target']})")
         for b, v in ch["beats_baselines"]["baselines"].items():
             typer.echo(f"  {'✓' if v['ok'] else '✗'} {b} taban çizgisine göre fark {v['mean']:+.4f} [{v['lo']:+.4f}, {v['hi']:+.4f}]")
+        fc = ch.get("final_confirmation")
+        if fc:
+            if fc.get("mean") is None:
+                typer.echo(f"  ✗ kesin doğrulama: {fc.get('note') or 'ölçülemedi'}")
+            else:
+                typer.echo(f"  {'✓' if fc['ok'] else '✗'} kesin doğrulama ({', '.join(fc['diseases'])}): sıklığa göre fark "
+                           f"{fc['mean']:+.4f} [{fc['lo']:+.4f}, {fc['hi']:+.4f}]")
     if rerank and result.get("applied"):
         for key in ready:
             with c.uow() as uow:

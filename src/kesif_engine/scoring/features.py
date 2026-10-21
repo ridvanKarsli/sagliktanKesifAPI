@@ -8,6 +8,10 @@ Kanallar (hepsi "büyük = daha güçlü kanıt"):
     mech        ilacın bilinen hedefi bir köprü gen mi (ilaç veritabanı mekanizması)
     direct      ilaç hastalık literatüründe doğrudan kaç makalede geçiyor (log)
     recent      bu doğrudan anılmaların son RECENT_YEARS yıldaki kısmı (log): yükselen ilgi
+    accel       kanıt ivmesi: son RECENT_YEARS yıldaki anılma, önceki anılmalara göre ne kadar hızlı artıyor
+                ((1 + yeni) / √(1 + eski); yeni anılma yoksa 0). Temiz etiketli ölçümde klinik çalışmaya giren ilaçların
+                %63'ü kesitten önce hastalık literatüründe zaten anılıyordu; bunlar arasında belirleyici olan toplam
+                anılma (popülerlik) değil, ilginin son yıllardaki hızlanmasıydı.
     genetic     ilaç hedeflerinin hastalıkla genetik ilişkisi (en güçlü hedef; 0–1)
     biology     hedeflerin genetik dışı bağımsız biyolojik kanıtı: hayvan modeli, gen ifadesi, yolak (0–1)
     network     hedeflerin protein ağında hastalık genlerine yakınlığı (derece eşlemeli z-skoru, en yakın hedef)
@@ -30,7 +34,7 @@ from typing import Dict, Iterable, Optional
 import pandas as pd
 
 RECENT_YEARS = 5
-CHANNELS = ("lit", "mech", "direct", "recent", "genetic", "biology", "network")
+CHANNELS = ("lit", "mech", "direct", "recent", "accel", "genetic", "biology", "network")
 GENETIC_TYPES = ("genetic_association", "somatic_mutation")
 BIOLOGY_TYPES = ("animal_model", "rna_expression", "affected_pathway")
 
@@ -137,15 +141,24 @@ def build(
             "ltc": b.get("ltc", 0.0),
             "direct": math.log1p(direct.get(k, 0)),
             "recent": math.log1p(recent.get(k, 0)),
+            "accel": _accel(recent.get(k, 0), direct.get(k, 0)),
             "genetic": _best(targets, genetic_table, GENETIC_TYPES),
             "biology": _best(targets, genetic_table, BIOLOGY_TYPES),
             "network": max(net, 0.0),
             "prevalence": in_c.get(k, 0) / n_c,
             "n_targets": len(targets),
         })
-    df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "ltc", "direct", "recent", "genetic", "biology",
-                                     "network", "prevalence", "n_targets"])
+    df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "ltc", "direct", "recent", "accel", "genetic",
+                                     "biology", "network", "prevalence", "n_targets"])
     return df.set_index("key")
+
+
+def _accel(n_recent: int, n_total: int) -> float:
+    """Kanıt ivmesi: (1 + yeni) / √(1 + eski). Yeni anılma yoksa 0 (sıralama kanalında 'kanıt yok')."""
+    if n_recent <= 0:
+        return 0.0
+    old = max(0, n_total - n_recent)
+    return round((1.0 + n_recent) / math.sqrt(1.0 + old), 6)
 
 
 def available_channels(features: pd.DataFrame) -> list:

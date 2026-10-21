@@ -305,6 +305,10 @@ def backtest(
             result[key] = result["schemes"][primary][key]
     result["n_future_in_universe"] = result.get("n_positives", 0)
     if return_features:
+        feats = feats.copy()
+        feats["frequency"] = rankings["frequency"].reindex(feats.index).fillna(0.0)
+        feats["direct_before"] = [1.0 if c in direct_before else 0.0 for c in feats.index]
+        feats["name"] = [name.get(c, c) for c in feats.index]
         result["_features"] = feats
         result["_labels"] = labels_out
     return result

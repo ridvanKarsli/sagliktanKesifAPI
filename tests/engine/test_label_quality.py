@@ -207,3 +207,17 @@ def test_gate_label_error_is_residual_after_audit_coverage():
     assert le["raw_error"] == 0.2 and le["coverage"] == 0.5 and le["value"] == 0.1 and not le["ok"]
     g = benchmark.gate_1(rows, {"measured_as": "rrf_core"}, {"a": {"audit": full, "labels": lab}}, ["a"], n_boot=100)
     assert g["checks"]["label_error"]["value"] == 0.0 and g["checks"]["label_error"]["ok"]
+
+
+def test_final_confirmation_requires_lower_bound_above_frequency():
+    import pandas as pd
+    f = pd.DataFrame({"base": [3.0, 2.0, 1.0, 0.5], "lit": [0.0, 0.0, 1.0, 2.0], "accel": [0.0, 0.0, 2.0, 1.0],
+                      "penalty": [1.0] * 4}, index=["a", "b", "c", "d"])
+    good = [{"disease": "x", "cutoff": c, "features": f, "positives": {"c"}, "frequency_ap": 0.25, "random_ap": 0.25}
+            for c in (2012, 2015, 2018)]
+    dec = {"method": "rrf", "channels": ["accel", "lit"], "measured_as": "rrf_ivme"}
+    r = benchmark.final_confirmation(dec, good, n_boot=100)
+    assert r["ok"] and r["vs_frequency"]["lo"] > 0 and r["groups"][0]["chosen_ap"] == 1.0
+    bad = [{**g, "frequency_ap": 1.0} for g in good]
+    assert not benchmark.final_confirmation(dec, bad, n_boot=100)["ok"]
+    assert not benchmark.final_confirmation(dec, [], n_boot=100)["ok"]

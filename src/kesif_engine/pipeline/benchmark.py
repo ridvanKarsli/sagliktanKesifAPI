@@ -53,6 +53,7 @@ def step_benchmark(keys: Optional[Iterable[str]] = None, hold_out: Optional[Iter
     keys = sorted(keys or ready_diseases())
     if hold_out is None:
         hold_out = [p["key"] for p in load_panel() if p.get("hold_out")]
+    final = [p["key"] for p in load_panel() if p.get("final")]
     inputs = {}
     for key in keys:
         try:
@@ -64,7 +65,8 @@ def step_benchmark(keys: Optional[Iterable[str]] = None, hold_out: Optional[Iter
         inputs[key] = {"a": c.a, "c": c.c, "labels": c.labels, "params": load_settings(key), "kwargs": c.kwargs(),
                        "external": c.external, "audit": c.audit}
         log.info("Ölçüme alındı: %s (%d makale)", key, len(c.a))
-    result = benchmark.run(inputs, hold_out=hold_out, cutoffs=cutoffs, progress=lambda m: log.info("  geriye dönük test: %s", m))
+    result = benchmark.run(inputs, hold_out=hold_out, cutoffs=cutoffs, progress=lambda m: log.info("  geriye dönük test: %s", m),
+                           final=[k for k in final if k in inputs])
     out = benchmark_dir()
     (out / "benchmark.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     decision = result["decision"]
