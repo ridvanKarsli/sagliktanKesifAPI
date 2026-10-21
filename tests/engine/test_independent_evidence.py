@@ -197,8 +197,9 @@ def test_opentargets_name_variants_and_no_blind_fallback():
     assert opentargets.find_disease(ByName(), "Arthritis, Rheumatoid", "MESH:D001172")["matched_by"] == "ad"
 
 
-def test_opentargets_falls_back_to_map_ids_and_reads_msh_prefix():
+def test_opentargets_falls_back_to_map_ids_and_reads_msh_prefix(monkeypatch):
     """Serbest arama yalnızca alt tipleri döndürse bile asıl hastalık doğrudan eşlemeyle bulunur."""
+    monkeypatch.setattr(opentargets, "known_ids", lambda mesh_id: [])
 
     class Subtypes:
         def request(self, method, url, json=None, **kwargs):
@@ -236,3 +237,21 @@ def test_string_skips_unmapped_genes_instead_of_failing_on_404():
 
     edges = string_ppi.partners(Partial(), ["IL6", "TNF", "BADGENE"])
     assert {(a, b) for a, b, _ in edges} == {("IL6", "STAT3"), ("STAT3", "TNF")}
+
+
+def test_opentargets_known_id_table_is_verified_before_use():
+    class Known:
+        def __init__(self, exists):
+            self.exists = exists
+
+        def request(self, method, url, json=None, **kwargs):
+            q = json["query"]
+            if "dbXRefs" in q:
+                vid = json["variables"]["id"]
+                if self.exists and vid == "MONDO_0005301":
+                    return FakeResponse({"data": {"disease": {"id": vid, "name": "multiple sclerosis", "dbXRefs": []}}})
+                return FakeResponse({"data": {"disease": None}})
+            return FakeResponse({"data": {"search": {"hits": []}, "mapIds": {"mappings": []}}})
+
+    assert opentargets.find_disease(Known(True), "Multiple Sclerosis", "MESH:D009103")["matched_by"] == "tablo"
+    assert opentargets.find_disease(Known(False), "Multiple Sclerosis", "MESH:D009103") is None

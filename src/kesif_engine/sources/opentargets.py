@@ -15,8 +15,10 @@ bulunur; bulunamazsa yalnızca adı yeterince benzeyen sonuç kabul edilir, yoks
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from pathlib import Path
 from typing import Dict, Optional
 
 from kesif_engine.core.net import HttpClient
@@ -117,6 +119,18 @@ def _similar(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb) if ta and tb else 0.0
 
 
+KNOWN_IDS_FILE = Path(__file__).resolve().parents[1] / "resources" / "opentargets_ids.json"
+
+
+def known_ids(mesh_id: str) -> list:
+    """Elle doğrulanmış kimlik tablosu (aramanın asıl hastalığı hiç döndürmediği durumlar için)."""
+    try:
+        table = json.loads(KNOWN_IDS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return list(table.get(_mesh_xref(mesh_id).upper()) or [])
+
+
 def _search(client: HttpClient, q: str) -> list:
     """Hastalık araması; boş yanıt bir kez yeniden denenir (servis zaman zaman boş sonuç dönebiliyor)."""
     for _ in range(2):
@@ -162,6 +176,10 @@ def find_disease(client: HttpClient, name: str, mesh_id: str = "") -> Optional[d
                 return {"id": h["id"], "name": d.get("name") or h.get("name"), "matched_by": "mesh"}
         return None
 
+    for oid in known_ids(mesh_id):
+        d = _post(client, XREF_QUERY, {"id": oid}).get("disease") or {}
+        if d.get("id") and (want in _xref_codes(d.get("dbXRefs")) or max(_similar(d.get("name", ""), v) for v in variants) >= 0.6):
+            return {"id": d["id"], "name": d.get("name"), "matched_by": "tablo"}
     for q in variants:
         found = add(_search(client, q))
         if found:

@@ -1,0 +1,4 @@
+{
+ "_aciklama": "Open Targets aramasının asıl hastalığı döndürmediği durumlar için elle doğrulanmış kimlikler (MeSH → EFO/MONDO). Her kimlik kullanılmadan önce Open Targets'ta varlığı ve adı yeniden doğrulanır.",
+ "MESH:D009103": ["MONDO_0005301", "EFO_0003885"]
+}
