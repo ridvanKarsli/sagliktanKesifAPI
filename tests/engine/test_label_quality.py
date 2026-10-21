@@ -221,3 +221,11 @@ def test_final_confirmation_requires_lower_bound_above_frequency():
     bad = [{**g, "frequency_ap": 1.0} for g in good]
     assert not benchmark.final_confirmation(dec, bad, n_boot=100)["ok"]
     assert not benchmark.final_confirmation(dec, [], n_boot=100)["ok"]
+
+
+def test_gate_does_not_pass_while_final_set_is_missing():
+    rows = [{"base_ap": 0.3, "rrf_core_ap": 0.4, "frequency_ap": 0.1, "ltc_ap": 0.1}] * 4
+    inputs = {"a": {"audit": {"n_checked": 50, "n_wrong": 0}}}
+    missing = benchmark.final_confirmation({"method": "base"}, [], n_boot=50)
+    g = benchmark.gate_1(rows * 7, {"measured_as": "rrf_core"}, inputs, ["a"] * 26, n_boot=50, final_check=missing)
+    assert not g["passed"] and "final_confirmation" in g["missing"]

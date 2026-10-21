@@ -253,7 +253,8 @@ def final_confirmation(decision: dict, groups: List[dict], n_boot: int = N_BOOT)
                      "base_ap": round(average_precision(f["base"], g["positives"]), 4),
                      "frequency_ap": g["frequency_ap"], "random_ap": g["random_ap"]})
     if not rows:
-        return {"ok": False, "groups": [], "note": "Doğrulama hastalıklarında ölçülebilir grup yok."}
+        return {"ok": False, "groups": [], "diseases": [],
+                "note": "Doğrulama hastalıklarının verisi henüz yok ya da ölçülebilir grup çıkmadı."}
     vs_freq = bootstrap_mean_ci([r["chosen_ap"] - r["frequency_ap"] for r in rows], n_boot)
     vs_base = bootstrap_mean_ci([r["chosen_ap"] - r["base_ap"] for r in rows], n_boot)
     return {"ok": vs_freq["lo"] is not None and vs_freq["lo"] > 0, "method": decision.get("measured_as") or "base",

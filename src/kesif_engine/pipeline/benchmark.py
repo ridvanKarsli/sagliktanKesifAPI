@@ -66,7 +66,7 @@ def step_benchmark(keys: Optional[Iterable[str]] = None, hold_out: Optional[Iter
                        "external": c.external, "audit": c.audit}
         log.info("Ölçüme alındı: %s (%d makale)", key, len(c.a))
     result = benchmark.run(inputs, hold_out=hold_out, cutoffs=cutoffs, progress=lambda m: log.info("  geriye dönük test: %s", m),
-                           final=[k for k in final if k in inputs])
+                           final=final)  # verisi henüz olmayan doğrulama hastalığı kapıyı açmaz: kontrol "ölçülemedi" olur
     out = benchmark_dir()
     (out / "benchmark.json").write_text(json.dumps(result, ensure_ascii=False, indent=1), encoding="utf-8")
     decision = result["decision"]
