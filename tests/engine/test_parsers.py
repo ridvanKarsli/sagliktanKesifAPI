@@ -225,3 +225,28 @@ def test_clinicaltrials_count_tolerates_control_characters():
             return Resp()
 
     assert clinicaltrials.count(Client(), "x", "y") == 7
+
+
+def test_novelty_survives_a_single_failing_candidate():
+    import pandas as pd
+
+    from kesif_engine.insights import novelty
+
+    class Resp:
+        def __init__(self, payload):
+            self._p, self.text = payload, None
+
+        def json(self):
+            return self._p
+
+    class Client:
+        def request(self, method, url, params=None, **kw):
+            if "clinicaltrials" in url:
+                return Resp({"totalCount": 2})
+            if "bad" in params.get("term", ""):
+                return Resp({"esearchresult": {"ERROR": "Invalid query"}})
+            return Resp({"esearchresult": {"count": "5"}})
+
+    df = pd.DataFrame([{"chemical": "good", "aliases": ""}, {"chemical": 'bad "name', "aliases": ""}])
+    out = novelty.add_novelty(Client(), df, {"name_en": "X", "pubmed_query": "x"}, top_n=2)
+    assert out["pubmed_direct"].iloc[0] == 5 and pd.isna(out["pubmed_direct"].iloc[1]) and list(out["durum"])[1] == ""

@@ -51,7 +51,11 @@ def search_pmids(
 def count(client: HttpClient, query: str) -> int:
     extra = {"db": "pubmed", "term": query, "retmode": "json", "retmax": 0}
     resp = client.request("GET", f"{EUTILS}/esearch.fcgi", params=_params(extra))
-    return int(resp.json()["esearchresult"]["count"])
+    result = resp.json().get("esearchresult") or {}
+    if "count" not in result:
+        # PubMed sorguyu ayrıştıramazsa sayı yerine hata döndürür; 0 saymak "hiç makale yok" demek olur, yanlış
+        raise ValueError(f"PubMed sorguyu işleyemedi: {str(result.get('ERROR') or result)[:120]}")
+    return int(result["count"])
 
 
 def count_by_year(client: HttpClient, query: str, start_year: int, end_year: int) -> dict:
