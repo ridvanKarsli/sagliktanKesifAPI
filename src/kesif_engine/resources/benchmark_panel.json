@@ -322,7 +322,8 @@
   "mesh_id": "MESH:D002446",
   "pubmed_query": "\"Celiac Disease\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "graves",
@@ -331,7 +332,8 @@
   "mesh_id": "MESH:D006111",
   "pubmed_query": "\"Graves Disease\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "psc",
@@ -340,7 +342,8 @@
   "mesh_id": "MESH:D015209",
   "pubmed_query": "\"Cholangitis, Sclerosing\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "bronchiectasis",
@@ -349,7 +352,8 @@
   "mesh_id": "MESH:D001987",
   "pubmed_query": "\"Bronchiectasis\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "fibromyalgia",
@@ -358,7 +362,8 @@
   "mesh_id": "MESH:D005356",
   "pubmed_query": "\"Fibromyalgia\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "narcolepsy",
@@ -367,7 +372,8 @@
   "mesh_id": "MESH:D009290",
   "pubmed_query": "\"Narcolepsy\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "essential-tremor",
@@ -376,7 +382,8 @@
   "mesh_id": "MESH:D020329",
   "pubmed_query": "\"Essential Tremor\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "restless-legs",
@@ -385,7 +392,8 @@
   "mesh_id": "MESH:D012148",
   "pubmed_query": "\"Restless Legs Syndrome\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "chronic-urticaria",
@@ -394,7 +402,8 @@
   "mesh_id": "MESH:D000080223",
   "pubmed_query": "\"Chronic Urticaria\"[MeSH Terms] OR \"chronic urticaria\"[Title/Abstract]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "uveitis",
@@ -403,6 +412,107 @@
   "mesh_id": "MESH:D014605",
   "pubmed_query": "\"Uveitis\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-22"
+ },
+ {
+  "key": "rosacea",
+  "label": "Rozasea",
+  "name_en": "Rosacea",
+  "mesh_id": "MESH:D012393",
+  "pubmed_query": "\"Rosacea\"[MeSH Terms] OR rosacea[Title/Abstract]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "glaucoma",
+  "label": "Açık açılı glokom",
+  "name_en": "Glaucoma, Open-Angle",
+  "mesh_id": "MESH:D005902",
+  "pubmed_query": "\"Glaucoma, Open-Angle\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "osteoporosis",
+  "label": "Osteoporoz",
+  "name_en": "Osteoporosis",
+  "mesh_id": "MESH:D010024",
+  "pubmed_query": "\"Osteoporosis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "schizophrenia",
+  "label": "Şizofreni",
+  "name_en": "Schizophrenia",
+  "mesh_id": "MESH:D012559",
+  "pubmed_query": "\"Schizophrenia\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "pemphigus",
+  "label": "Pemfigus",
+  "name_en": "Pemphigus",
+  "mesh_id": "MESH:D010392",
+  "pubmed_query": "\"Pemphigus\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "autoimmune-hepatitis",
+  "label": "Otoimmün hepatit",
+  "name_en": "Hepatitis, Autoimmune",
+  "mesh_id": "MESH:D019693",
+  "pubmed_query": "\"Hepatitis, Autoimmune\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "iga-nephropathy",
+  "label": "IgA nefropatisi",
+  "name_en": "Glomerulonephritis, IGA",
+  "mesh_id": "MESH:D005922",
+  "pubmed_query": "\"Glomerulonephritis, IGA\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "interstitial-cystitis",
+  "label": "İnterstisyel sistit",
+  "name_en": "Cystitis, Interstitial",
+  "mesh_id": "MESH:D018856",
+  "pubmed_query": "\"Cystitis, Interstitial\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "giant-cell-arteritis",
+  "label": "Dev hücreli arterit",
+  "name_en": "Giant Cell Arteritis",
+  "mesh_id": "MESH:D013700",
+  "pubmed_query": "\"Giant Cell Arteritis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
+ },
+ {
+  "key": "lichen-planus",
+  "label": "Liken planus",
+  "name_en": "Lichen Planus",
+  "mesh_id": "MESH:D008010",
+  "pubmed_query": "\"Lichen Planus\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-22"
  }
 ]

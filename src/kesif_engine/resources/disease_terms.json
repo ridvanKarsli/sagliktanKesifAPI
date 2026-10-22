@@ -361,5 +361,81 @@
    "iridocyclitis",
    "choroiditis"
   ]
+ },
+ "MESH:D012393": {
+  "terms": [
+   "rosacea"
+  ]
+ },
+ "MESH:D005902": {
+  "terms": [
+   "open-angle glaucoma",
+   "open angle glaucoma",
+   "glaucoma, open-angle",
+   "primary open-angle glaucoma",
+   "poag",
+   "glaucoma"
+  ],
+  "exclude": [
+   "angle-closure",
+   "angle closure",
+   "neovascular",
+   "congenital"
+  ]
+ },
+ "MESH:D010024": {
+  "terms": [
+   "osteoporosis",
+   "osteoporotic"
+  ]
+ },
+ "MESH:D012559": {
+  "terms": [
+   "schizophrenia",
+   "schizophrenic"
+  ]
+ },
+ "MESH:D010392": {
+  "terms": [
+   "pemphigus"
+  ],
+  "exclude": [
+   "pemphigoid"
+  ]
+ },
+ "MESH:D019693": {
+  "terms": [
+   "autoimmune hepatitis",
+   "hepatitis, autoimmune"
+  ]
+ },
+ "MESH:D005922": {
+  "terms": [
+   "iga nephropathy",
+   "iga glomerulonephritis",
+   "immunoglobulin a nephropathy",
+   "glomerulonephritis, iga",
+   "berger disease"
+  ]
+ },
+ "MESH:D018856": {
+  "terms": [
+   "interstitial cystitis",
+   "bladder pain syndrome",
+   "painful bladder syndrome",
+   "cystitis, interstitial"
+  ]
+ },
+ "MESH:D013700": {
+  "terms": [
+   "giant cell arteritis",
+   "temporal arteritis",
+   "horton"
+  ]
+ },
+ "MESH:D008010": {
+  "terms": [
+   "lichen planus"
+  ]
  }
 }
