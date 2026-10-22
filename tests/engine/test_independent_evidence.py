@@ -239,7 +239,8 @@ def test_string_skips_unmapped_genes_instead_of_failing_on_404():
     assert {(a, b) for a, b, _ in edges} == {("IL6", "STAT3"), ("STAT3", "TNF")}
 
 
-def test_opentargets_known_id_table_is_verified_before_use():
+def test_opentargets_known_id_table_is_verified_before_use(monkeypatch):
+    monkeypatch.setattr(opentargets, "known_ids", lambda mesh_id: ["MONDO_0005301"])
     class Known:
         def __init__(self, exists):
             self.exists = exists
@@ -321,3 +322,23 @@ def test_decision_prefers_method_that_holds_in_every_set():
     rows = [{}] * 80
     d = bm._decide(sc, ["base", "rrf_ivme", "rrf_core"], rows, ["x"] * 30, [], [], False, None, hold)
     assert d["measured_as"] == "rrf_core" and d["robustness"] == 0.004
+
+
+def test_opentargets_union_of_subtypes_takes_max_score_per_gene(monkeypatch):
+    monkeypatch.setattr(opentargets, "union_ids", lambda mesh_id: ["S1", "S2"])
+
+    class Sub:
+        def request(self, method, url, json=None, **kwargs):
+            q, v = json["query"], json["variables"]
+            if "dbXRefs" in q:
+                return FakeResponse({"data": {"disease": {"id": v["id"], "name": v["id"].lower(), "dbXRefs": []}}})
+            sc = 0.9 if v["id"] == "S1" else 0.4
+            rows = [{"target": {"id": "E", "approvedSymbol": "IL7R"}, "score": sc,
+                     "datatypeScores": [{"id": "genetic_association", "score": sc}]},
+                    {"target": {"id": "F", "approvedSymbol": f"G{v['id']}"}, "score": 0.2,
+                     "datatypeScores": [{"id": "animal_model", "score": 0.2}]}]
+            return FakeResponse({"data": {"disease": {"id": v["id"], "associatedTargets": {"count": 2, "rows": rows}}}})
+
+    out = opentargets.fetch(Sub(), "Multiple Sclerosis", "MESH:D009103")
+    assert out["disease"]["matched_by"] == "alt tip birleşimi" and out["targets"]["IL7R"]["genetic_association"] == 0.9
+    assert {"GS1", "GS2"} <= set(out["targets"]) and out["n_genetic"] == 1

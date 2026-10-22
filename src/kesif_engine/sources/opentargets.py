@@ -128,13 +128,23 @@ def _similar(a: str, b: str) -> float:
 KNOWN_IDS_FILE = Path(__file__).resolve().parents[1] / "resources" / "opentargets_ids.json"
 
 
+def _table() -> dict:
+    try:
+        return json.loads(KNOWN_IDS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def known_ids(mesh_id: str) -> list:
     """Elle doğrulanmış kimlik tablosu (aramanın asıl hastalığı hiç döndürmediği durumlar için)."""
-    try:
-        table = json.loads(KNOWN_IDS_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return list(table.get(_mesh_xref(mesh_id).upper()) or [])
+    entry = _table().get(_mesh_xref(mesh_id).upper())
+    return list(entry) if isinstance(entry, list) else []
+
+
+def union_ids(mesh_id: str) -> list:
+    """Tek üst kaydı olmayan hastalığın birleştirilecek alt tip kimlikleri (tabloda {"union": [...]})."""
+    entry = _table().get(_mesh_xref(mesh_id).upper())
+    return list(entry.get("union") or []) if isinstance(entry, dict) else []
 
 
 def _search(client: HttpClient, q: str) -> list:
@@ -253,6 +263,28 @@ def associations(client: HttpClient, efo_id: str, max_targets: int = MAX_TARGETS
 
 def fetch(client: HttpClient, name_en: str, mesh_id: str = "") -> dict:
     """Bir hastalık için genetik/biyolojik kanıt paketi."""
+    union = union_ids(mesh_id)
+    if union:
+        found: list = []
+        targets_u: Dict[str, Dict[str, float]] = {}
+        for oid in union:
+            d = _post(client, XREF_QUERY, {"id": oid}).get("disease") or {}
+            if not d.get("id"):
+                log.info("  Open Targets alt tip kimliği bulunamadı: %s", oid)
+                continue
+            found.append({"id": d["id"], "name": d.get("name")})
+            for sym, sc in associations(client, d["id"]).items():
+                cur = targets_u.setdefault(sym, {})
+                for k, v in sc.items():
+                    cur[k] = max(cur.get(k, 0.0), v)
+        if found:
+            n_gen = sum(1 for v in targets_u.values() if any(k in v for k in ("genetic_association", "somatic_mutation")))
+            merged = {"id": "+".join(f["id"] for f in found), "name": " + ".join(f["name"] or f["id"] for f in found),
+                      "matched_by": "alt tip birleşimi"}
+            log.info("  genetik kanıt: %s — %d hedef, %d'inde genetik ilişki (alt tipler birleştirildi)", merged["name"],
+                     len(targets_u), n_gen)
+            return {"disease": merged, "targets": targets_u, "used_types": list(USED_TYPES),
+                    "excluded_types": list(EXCLUDED_TYPES), "n_genetic": n_gen}
     disease = find_disease(client, name_en, mesh_id)
     if not disease:
         log.warning("  genetik kanıt: '%s' (%s) Open Targets'ta güvenilir biçimde eşlenemedi; genetik kanal boş kalacak.",

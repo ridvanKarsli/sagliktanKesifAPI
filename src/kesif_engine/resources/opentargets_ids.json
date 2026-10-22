@@ -1,4 +1,11 @@
 {
- "_aciklama": "Open Targets aramasının asıl hastalığı döndürmediği durumlar için elle doğrulanmış kimlikler (MeSH → EFO/MONDO). Her kimlik kullanılmadan önce Open Targets'ta varlığı ve adı yeniden doğrulanır.",
- "MESH:D009103": ["MONDO_0005301", "EFO_0003885"]
+ "_aciklama": "Open Targets aramasının asıl hastalığı döndürmediği durumlar için elle doğrulanmış kimlikler (MeSH → EFO/MONDO). Her kimlik kullanılmadan önce Open Targets'ta varlığı ve adı yeniden doğrulanır. 'union': hastalığın tek bir üst kaydı yoksa alt tiplerinin ilişkileri birleştirilir (her gen ve veri türü için en yüksek skor). Multipl skleroz: Open Targets'ta MONDO_0005301 kaydı yok; alt tiplerin üst kaydı bir ölçüm terimi (EFO_0803536), bu yüzden dört klinik alt tip birleştirilir (Mac teşhisi, 22 Ekim 2026).",
+ "MESH:D009103": {
+  "union": [
+   "MONDO_0005314",
+   "MONDO_0000451",
+   "MONDO_0000450",
+   "MONDO_0005284"
+  ]
+ }
 }
