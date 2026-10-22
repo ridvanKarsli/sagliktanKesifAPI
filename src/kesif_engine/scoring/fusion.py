@@ -195,8 +195,11 @@ class StackFusion:
     def predict_model(self, features: pd.DataFrame) -> pd.Series:
         if len(features) == 0:
             return pd.Series(dtype=float)
-        z = self._x(features) @ self.coef + self.intercept
-        return pd.Series(1.0 / (1.0 + np.exp(-z)), index=features.index)
+        # macOS Accelerate'li numpy matmul'da sahte bölme/taşma uyarıları verebiliyor; sonuç sonlu tutulur
+        with np.errstate(all="ignore"):
+            z = np.clip(self._x(features) @ self.coef + self.intercept, -50.0, 50.0)
+            p = 1.0 / (1.0 + np.exp(-z))
+        return pd.Series(p, index=features.index)
 
     def predict(self, features: pd.DataFrame) -> pd.Series:
         """Son puan: model puanı ile popülerlik sırasının sıra birleştirmesi (zarar cezası çağıran tarafta uygulanır)."""
