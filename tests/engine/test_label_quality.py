@@ -229,3 +229,9 @@ def test_gate_does_not_pass_while_final_set_is_missing():
     missing = benchmark.final_confirmation({"method": "base"}, [], n_boot=50)
     g = benchmark.gate_1(rows * 7, {"measured_as": "rrf_core"}, inputs, ["a"] * 26, n_boot=50, final_check=missing)
     assert not g["passed"] and "final_confirmation" in g["missing"]
+
+
+def test_schema6_excludes_perioperative_use():
+    assert labels.exclusion_reason({"title": "Dexmedetomidine Added to Adductor Canal Block After Total Knee Arthroplasty"}) == "procedural"
+    assert labels.exclusion_reason({"title": "Gabapentin for Postoperative Pain After Hip Replacement"}) == "procedural"
+    assert labels.exclusion_reason({"title": "Ustekinumab to Prevent Postoperative Recurrence of Crohn's Disease"}) == ""

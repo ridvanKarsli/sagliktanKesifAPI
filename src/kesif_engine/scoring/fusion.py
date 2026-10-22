@@ -131,6 +131,100 @@ class LogisticFusion:
         return sorted(({"feature": n, "weight": round(float(c), 4)} for n, c in zip(self.names, self.coef)), key=lambda r: -abs(r["weight"]))
 
 
+STACK_FEATURES = ["frequency", "direct", "recent", "accel", "lit", "mech", "ltc", "genetic", "biology", "network",
+                  "prevalence"]
+
+
+class StackFusion:
+    """Popülerlik üstüne bilgi: ham (log) ölçekli lojistik model + popülerlik sırasıyla sıra birleştirme.
+
+    Neden ham ölçek: hastalık içi yüzdelik sıraya çevirmek mutlak büyüklüğü (ör. ivmenin 30 mu 2 mi olduğunu) siler;
+    38 hastalıkta "bir hastalığı dışarıda bırak" düzeniyle ölçülen fark (sıklığa göre) yüzdelikte +0,007, ham ölçekte
+    +0,034 çıktı. Neden popülerlikle birleştirme: az pozitifli hastalıklarda en üst sıra ortalama kesinliği belirler ve
+    sonradan yeniden denenen çok eski, çok yazılmış ilaçları (siklosporin, flunarizin) yalnızca popülerlik üste koyar;
+    model ise popülerliğin göremediği adayları (genetik/ağ kanıtlı, yeni yükselen) yukarı taşır. Birleşim üç ayrı
+    hastalık setinin hepsinde sıklığı geçen tek adaydı.
+
+    Model: katsayıları serbest (popülerlik ve kanalların birbirini düzeltebilmesi için), L2 düzenlemeli, her
+    hastalık×kesit grubunu eşit ağırlıkla sayan ve grup içinde sınıf dengeli lojistik regresyon (Newton yöntemi; numpy).
+    """
+
+    def __init__(self, names: Optional[List[str]] = None, c: float = 1.0, max_iter: int = 100):
+        self.names = list(names or STACK_FEATURES)
+        self.c, self.max_iter = c, max_iter
+        self.coef = np.zeros(len(self.names))
+        self.intercept = 0.0
+        self.meta: dict = {}
+
+    def _x(self, features: pd.DataFrame) -> np.ndarray:
+        cols = [features[n].astype(float).clip(lower=0).to_numpy() if n in features.columns else np.zeros(len(features))
+                for n in self.names]
+        return np.log1p(np.column_stack(cols)) if cols else np.zeros((len(features), 0))
+
+    def fit(self, groups: List[pd.DataFrame], labels: List[pd.Series]) -> StackFusion:
+        xs, ys, ws = [], [], []
+        for f, lab in zip(groups, labels):
+            if len(f) == 0:
+                continue
+            y = lab.reindex(f.index).fillna(0).astype(float).to_numpy()
+            n_pos = y.sum()
+            if n_pos == 0 or n_pos == len(y):
+                continue
+            xs.append(self._x(f))
+            ys.append(y)
+            ws.append(np.where(y > 0, 0.5 / n_pos, 0.5 / (len(y) - n_pos)) * 1000.0)
+        if not xs:
+            raise ValueError("Eğitim için hem pozitif hem negatif örnek içeren grup gerekir.")
+        x, y, w = np.vstack(xs), np.concatenate(ys), np.concatenate(ws)
+        xa = np.column_stack([x, np.ones(len(x))])
+        beta = np.zeros(xa.shape[1])
+        reg = np.ones(xa.shape[1]) / self.c
+        reg[-1] = 0.0  # sabit terim düzenlenmez
+        for _ in range(self.max_iter):
+            p = 1.0 / (1.0 + np.exp(-(xa @ beta)))
+            grad = xa.T @ (w * (p - y)) + reg * beta
+            hess = (xa * (w * p * (1 - p))[:, None]).T @ xa + np.diag(reg) + 1e-9 * np.eye(len(beta))
+            step = np.linalg.solve(hess, grad)
+            beta -= step
+            if np.max(np.abs(step)) < 1e-8:
+                break
+        self.coef, self.intercept = beta[:-1], float(beta[-1])
+        self.meta = {"n_rows": int(len(y)), "n_positive": int(y.sum()), "n_groups": len(xs)}
+        return self
+
+    def predict_model(self, features: pd.DataFrame) -> pd.Series:
+        if len(features) == 0:
+            return pd.Series(dtype=float)
+        z = self._x(features) @ self.coef + self.intercept
+        return pd.Series(1.0 / (1.0 + np.exp(-z)), index=features.index)
+
+    def predict(self, features: pd.DataFrame) -> pd.Series:
+        """Son puan: model puanı ile popülerlik sırasının sıra birleştirmesi (zarar cezası çağıran tarafta uygulanır)."""
+        if len(features) == 0:
+            return pd.Series(dtype=float)
+        t = pd.DataFrame({"model": self.predict_model(features),
+                          "frequency": features["frequency"].astype(float) if "frequency" in features.columns else 0.0},
+                         index=features.index)
+        return rrf(t, ["model", "frequency"])
+
+    def to_dict(self) -> dict:
+        return {"type": "stack", "features": self.names, "coef": [round(float(v), 6) for v in self.coef],
+                "intercept": round(float(self.intercept), 6), "c": self.c, "transform": "log1p (ham ölçek)",
+                "combine": "rrf(model, frequency)", **self.meta}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> StackFusion:
+        m = cls(d["features"], c=d.get("c", 1.0))
+        m.coef = np.array(d["coef"], dtype=float)
+        m.intercept = float(d["intercept"])
+        m.meta = {k: d[k] for k in ("n_rows", "n_positive", "n_groups") if k in d}
+        return m
+
+    def explain(self) -> List[dict]:
+        return sorted(({"feature": n, "weight": round(float(c), 4)} for n, c in zip(self.names, self.coef)),
+                      key=lambda r: -abs(r["weight"]))
+
+
 # ---------------- uygulama ----------------
 
 def model_path(data_dir: Path) -> Path:
@@ -167,6 +261,8 @@ def fused_score(features: pd.DataFrame, decision: Optional[dict]) -> pd.Series:
     method = decision.get("method", "base")
     if method == "logistic" and decision.get("model"):
         s = LogisticFusion.from_dict(decision["model"]).predict(features)
+    elif method == "stack" and decision.get("model"):
+        s = StackFusion.from_dict(decision["model"]).predict(features)
     elif method == "rrf":
         s = rrf(features, decision.get("channels") or CHANNELS, decision.get("weights"))
     else:

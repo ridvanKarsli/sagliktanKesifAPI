@@ -17,6 +17,8 @@ Kanallar (hepsi "büyük = daha güçlü kanıt"):
     network     hedeflerin protein ağında hastalık genlerine yakınlığı (derece eşlemeli z-skoru, en yakın hedef)
 
 Ek sütunlar (sıralama kanalı değil, açıklayıcı/denetim): base (mevcut yöntem puanı), penalty (zarar sinyali çarpanı),
+frequency (ilacın hastalık ve köprü gen literatüründe toplam anılma sayısı: popülerlik; geriye dönük testteki
+"sıklık" taban çizgisiyle birebir aynı sayım),
 ltc (ilacı hastalığa bağlayan farklı köprü gen sayısı; literatür tabanlı keşifte yayımlanmış "bağlantı terimi sayısı"
 taban çizgisi),
 prevalence (ilacın köprü gen literatüründeki yaygınlığı; "her yerde geçen ilaç" ölçüsü), n_targets.
@@ -101,6 +103,11 @@ def build(
 
     c_unique = {r.pmid: r for r in c_records}
     n_c = len(c_unique) or 1
+    # popülerlik: geriye dönük testteki sıklık taban çizgisiyle aynı sayım (her makale × her kimyasal anılma)
+    freq: Dict[str, int] = defaultdict(int)
+    for rec in list(a_records) + list(c_unique.values()):
+        for cid in rec.chemicals:
+            freq[key_of(cid)] += 1
     in_c: Dict[str, int] = defaultdict(int)
     for rec in c_unique.values():
         for k in {key_of(cid) for cid in rec.chemicals}:
@@ -146,10 +153,11 @@ def build(
             "biology": _best(targets, genetic_table, BIOLOGY_TYPES),
             "network": max(net, 0.0),
             "prevalence": in_c.get(k, 0) / n_c,
+            "frequency": float(freq.get(k, 0)),
             "n_targets": len(targets),
         })
     df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "ltc", "direct", "recent", "accel", "genetic",
-                                     "biology", "network", "prevalence", "n_targets"])
+                                     "biology", "network", "prevalence", "frequency", "n_targets"])
     return df.set_index("key")
 
 

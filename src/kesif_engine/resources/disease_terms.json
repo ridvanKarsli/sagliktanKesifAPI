@@ -285,5 +285,81 @@
   "terms": [
    "vitiligo"
   ]
+ },
+ "MESH:D002446": {
+  "terms": [
+   "celiac",
+   "coeliac",
+   "gluten-sensitive enteropathy"
+  ],
+  "exclude": [
+   "refractory celiac lymphoma"
+  ]
+ },
+ "MESH:D006111": {
+  "terms": [
+   "graves",
+   "thyroid eye disease",
+   "thyroid-associated ophthalmopathy",
+   "graves ophthalmopathy",
+   "graves orbitopathy"
+  ]
+ },
+ "MESH:D015209": {
+  "terms": [
+   "primary sclerosing cholangitis",
+   "sclerosing cholangitis",
+   "psc"
+  ],
+  "exclude": [
+   "igg4",
+   "secondary"
+  ]
+ },
+ "MESH:D001987": {
+  "terms": [
+   "bronchiectasis"
+  ],
+  "exclude": [
+   "cystic fibrosis"
+  ]
+ },
+ "MESH:D005356": {
+  "terms": [
+   "fibromyalgia"
+  ]
+ },
+ "MESH:D009290": {
+  "terms": [
+   "narcolepsy",
+   "cataplexy"
+  ]
+ },
+ "MESH:D020329": {
+  "terms": [
+   "essential tremor"
+  ]
+ },
+ "MESH:D012148": {
+  "terms": [
+   "restless legs",
+   "restless leg",
+   "willis-ekbom"
+  ]
+ },
+ "MESH:D000080223": {
+  "terms": [
+   "chronic urticaria",
+   "chronic spontaneous urticaria",
+   "chronic idiopathic urticaria",
+   "chronic inducible urticaria"
+  ]
+ },
+ "MESH:D014605": {
+  "terms": [
+   "uveitis",
+   "iridocyclitis",
+   "choroiditis"
+  ]
  }
 }

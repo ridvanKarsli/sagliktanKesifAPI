@@ -288,3 +288,36 @@ def test_benchmark_scores_rrf_ivme_from_accel_and_lit():
     f = pd.DataFrame({"base": [1.0, 0.0], "lit": [0.0, 1.0], "accel": [2.0, 0.0], "penalty": [1.0, 1.0]}, index=["X", "Y"])
     s = bm._score("rrf_ivme", f)
     assert s["X"] > 0 and s["Y"] > 0 and abs(s["X"] - s["Y"]) < 1e-12
+
+
+def test_stack_fusion_learns_on_raw_scale_and_keeps_popular_drugs_near_top():
+    rng = np.random.default_rng(0)
+    groups, labels = [], []
+    for _ in range(6):
+        n = 200
+        f = pd.DataFrame({c: rng.random(n) for c in fusion.STACK_FEATURES}, index=[f"d{i}" for i in range(n)])
+        f["accel"] = rng.random(n) * 5
+        y = pd.Series((f["accel"] > 4.5).astype(float), index=f.index)
+        groups.append(f)
+        labels.append(y)
+    m = fusion.StackFusion().fit(groups, labels)
+    w = dict((r["feature"], r["weight"]) for r in m.explain())
+    assert w["accel"] > 0 and max(w, key=lambda k: abs(w[k])) == "accel"
+    s = m.predict(groups[0])
+    top_pop = groups[0]["frequency"].idxmax()
+    assert s.rank(ascending=False)[top_pop] <= len(s) / 2  # popülerlik sırası birleşimde korunur
+    again = fusion.StackFusion.from_dict(m.to_dict())
+    assert np.allclose(again.predict(groups[1]), m.predict(groups[1]))
+
+
+def test_decision_prefers_method_that_holds_in_every_set():
+    from kesif_engine.evaluation import benchmark as bm
+    sc = {"base": {"ap": {"mean": 0.08}},
+          "rrf_ivme": {"ap": {"mean": 0.12}, "vs_base": {"lo": 0.01, "hi": 0.05, "mean": 0.03}, "wins": 50, "losses": 20,
+                       "vs_frequency": {"lo": 0.02}},
+          "rrf_core": {"ap": {"mean": 0.10}, "vs_base": {"lo": 0.005, "hi": 0.03, "mean": 0.02}, "wins": 45, "losses": 25,
+                       "vs_frequency": {"lo": 0.01}}}
+    hold = {"rrf_ivme": {"vs_frequency": {"lo": -0.02}}, "rrf_core": {"vs_frequency": {"lo": 0.004}}}
+    rows = [{}] * 80
+    d = bm._decide(sc, ["base", "rrf_ivme", "rrf_core"], rows, ["x"] * 30, [], [], False, None, hold)
+    assert d["measured_as"] == "rrf_core" and d["robustness"] == 0.004

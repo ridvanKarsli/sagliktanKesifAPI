@@ -262,7 +262,8 @@
   "mesh_id": "MESH:D010003",
   "pubmed_query": "\"Osteoarthritis\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-21"
  },
  {
   "key": "alopecia-areata",
@@ -271,7 +272,8 @@
   "mesh_id": "MESH:D000506",
   "pubmed_query": "\"Alopecia Areata\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-21"
  },
  {
   "key": "pbc",
@@ -280,7 +282,8 @@
   "mesh_id": "MESH:D008105",
   "pubmed_query": "\"Liver Cirrhosis, Biliary\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-21"
  },
  {
   "key": "pcos",
@@ -289,7 +292,8 @@
   "mesh_id": "MESH:D011085",
   "pubmed_query": "\"Polycystic Ovary Syndrome\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-21"
  },
  {
   "key": "migraine",
@@ -298,7 +302,8 @@
   "mesh_id": "MESH:D008881",
   "pubmed_query": "\"Migraine Disorders\"[MeSH Terms]",
   "hold_out": false,
-  "final": true
+  "final": false,
+  "used_as_final": "2026-10-21"
  },
  {
   "key": "vitiligo",
@@ -306,6 +311,97 @@
   "name_en": "Vitiligo",
   "mesh_id": "MESH:D014820",
   "pubmed_query": "\"Vitiligo\"[MeSH Terms]",
+  "hold_out": false,
+  "final": false,
+  "used_as_final": "2026-10-21"
+ },
+ {
+  "key": "celiac",
+  "label": "Çölyak hastalığı",
+  "name_en": "Celiac Disease",
+  "mesh_id": "MESH:D002446",
+  "pubmed_query": "\"Celiac Disease\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "graves",
+  "label": "Graves hastalığı",
+  "name_en": "Graves Disease",
+  "mesh_id": "MESH:D006111",
+  "pubmed_query": "\"Graves Disease\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "psc",
+  "label": "Primer sklerozan kolanjit",
+  "name_en": "Cholangitis, Sclerosing",
+  "mesh_id": "MESH:D015209",
+  "pubmed_query": "\"Cholangitis, Sclerosing\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "bronchiectasis",
+  "label": "Bronşektazi",
+  "name_en": "Bronchiectasis",
+  "mesh_id": "MESH:D001987",
+  "pubmed_query": "\"Bronchiectasis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "fibromyalgia",
+  "label": "Fibromiyalji",
+  "name_en": "Fibromyalgia",
+  "mesh_id": "MESH:D005356",
+  "pubmed_query": "\"Fibromyalgia\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "narcolepsy",
+  "label": "Narkolepsi",
+  "name_en": "Narcolepsy",
+  "mesh_id": "MESH:D009290",
+  "pubmed_query": "\"Narcolepsy\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "essential-tremor",
+  "label": "Esansiyel tremor",
+  "name_en": "Essential Tremor",
+  "mesh_id": "MESH:D020329",
+  "pubmed_query": "\"Essential Tremor\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "restless-legs",
+  "label": "Huzursuz bacak sendromu",
+  "name_en": "Restless Legs Syndrome",
+  "mesh_id": "MESH:D012148",
+  "pubmed_query": "\"Restless Legs Syndrome\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "chronic-urticaria",
+  "label": "Kronik ürtiker",
+  "name_en": "Chronic Urticaria",
+  "mesh_id": "MESH:D000080223",
+  "pubmed_query": "\"Chronic Urticaria\"[MeSH Terms] OR \"chronic urticaria\"[Title/Abstract]",
+  "hold_out": false,
+  "final": true
+ },
+ {
+  "key": "uveitis",
+  "label": "Üveit",
+  "name_en": "Uveitis",
+  "mesh_id": "MESH:D014605",
+  "pubmed_query": "\"Uveitis\"[MeSH Terms]",
   "hold_out": false,
   "final": true
  }

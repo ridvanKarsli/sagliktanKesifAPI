@@ -18,6 +18,8 @@ ilaçları da girer). Bu modül iki temiz etiket kaynağı sağlar:
                 (midazolam, varfarin gibi ölçüm amaçlı ilaçlar "test edilen ilaç" değildir).
               - Nakil, CAR-T, gen ya da hücre tedavisi içeren çalışmalarda ilaçlar hazırlık/destek amaçlıdır; sayılmaz.
               - Sedasyon, anestezi, biyopsi, ön ilaçlama amaçlı çalışmalar sayılmaz.
+            Şema 6: ameliyat çevresi kullanımlar (protez ameliyatı sonrası ağrı/bulantı, sinir bloğu katkıları)
+              sayılmaz; doğrulama hastalıklarından osteoartritte yanlışların çoğu buydu.
             Şema 5 (ikinci denetimde %19 hata): MeSH kodu tek başına yetmez. ClinicalTrials.gov pulmoner hipertansiyona
               'Hypertension' kodu da atıyor, MeSH ağacı Sjögren'i romatoid artritin altına koyuyor. Çalışmanın hastalık
               listesinde ya da başlığında hastalığın adı (resources/disease_terms.json) geçmeli ve ad başka bir
@@ -47,7 +49,7 @@ from kesif_engine.sources.clinicaltrials import fetch_trials, trial_counts
 
 log = logging.getLogger(__name__)
 _DOSE = re.compile(r"\b\d+(\.\d+)?\s*(mg|mcg|µg|ug|g|ml|%|iu|units?)\b.*$", re.I)
-SCHEMA = 5
+SCHEMA = 6
 
 
 def fetch_therapy_pmids(client: HttpClient, disease_query: str, start_year: int, end_year: int) -> list:
@@ -92,7 +94,9 @@ PK_STUDY = re.compile(
 PROCEDURAL = re.compile(
     r"\ban(a)?esthe|\bsedation\b|\bsedative\b|for (a |the )?(muscle |skin |renal )?biopsy|premedication|neuromuscular block|bowel prep"
     r"|colonoscopy|intubation|capsule endoscopy|endoscopy preparation|perioperative|intraoperative|post-induction"
-    r"|infusion[- ](associated|related) reactions?|infusion reactions?|stellate ganglion|for imaging|nerve block|\bECMO\b|extracorporeal", re.I)
+    r"|infusion[- ](associated|related) reactions?|infusion reactions?|stellate ganglion|for imaging|nerve block|\bECMO\b|extracorporeal"
+    r"|arthroplasty|(knee|hip|joint) replacement|post-?operative (pain|nausea|analgesia|cognitive|delirium|opioid)"
+    r"|peri-?operative|after (total )?(knee|hip) (surgery|replacement)|microfracture", re.I)
 SUPPORT_CONTEXT = re.compile(
     r"transplant|stem[- ]cell|\bHSCT\b|\bCAR[- ]?T\b|chimeric antigen|gene therapy|\bAAV\d*\b|lymphodeplet|conditioning regimen"
     r"|\b(NK|T)[- ]cells?\b|cell therapy|\bcells\b", re.I)
