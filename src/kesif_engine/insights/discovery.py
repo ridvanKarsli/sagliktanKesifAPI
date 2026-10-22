@@ -79,6 +79,11 @@ def justify(row: Dict[str, Any], links: list, disease_label: str) -> str:
     if isinstance(nt, str) and nt:
         sym, val = nt.rsplit(" ", 1)
         parts.append(f"Protein ağında hedefi {sym} hastalık genlerine rastgele beklenenden yakın ({val.replace('z=', 'z = ')}).")
+    sf = row.get("similar_from")
+    if isinstance(sf, str) and sf:
+        names = [x.rsplit(" ", 1)[0] for x in sf.split("; ")]
+        parts.append(f"Benzer hastalıklarda daha önce klinik çalışmaya girmiş: {', '.join(names)} "
+                     "(benzerlik, iki hastalıkta denenmiş ilaçların örtüşmesinden).")
     harm = row.get("harm_signal") or "yok"
     if harm == "yok":
         parts.append("Hastalıkla doğrudan ilişki raporu yok; güvenlik sinyali değerlendirilemedi.")
@@ -156,6 +161,7 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
             "pubmed_direct": None if _nan(r.get("pubmed_direct")) else int(r["pubmed_direct"]),
             "genetic_target": r.get("genetic_target") if isinstance(r.get("genetic_target"), str) else "",
             "network_target": r.get("network_target") if isinstance(r.get("network_target"), str) else "",
+            "similar_from": r.get("similar_from") if isinstance(r.get("similar_from"), str) else "",
             "justification": justify(r.to_dict(), links, disease_cfg.get("label", "hastalık")),
         })
 

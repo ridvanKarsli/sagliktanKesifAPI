@@ -360,6 +360,7 @@ def atlas(download: bool = typer.Option(True, help="Ham çalışmaları indir (k
     import logging
 
     from kesif_engine.core import config as engine_config
+    from kesif_engine.evaluation import atlas as atlas_build
     from kesif_engine.sources import chembl, trial_atlas
 
     from ...container import get_container
@@ -376,7 +377,7 @@ def atlas(download: bool = typer.Option(True, help="Ham çalışmaları indir (k
         if not drugs:
             typer.echo("İlaç sözlüğü yok; önce bir hastalık analizi çalıştırın.", err=True)
             raise typer.Exit(2)
-        trial_atlas.build(trial_atlas.iter_raw(), drugs, engine_config.MIN_PHASE, progress=typer.echo)
+        atlas_build.build(trial_atlas.iter_raw(), drugs, engine_config.MIN_PHASE, progress=typer.echo)
         ws.save()
 
 

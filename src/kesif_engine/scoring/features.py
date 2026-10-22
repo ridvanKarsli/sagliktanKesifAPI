@@ -15,6 +15,10 @@ Kanallar (hepsi "büyük = daha güçlü kanıt"):
     genetic     ilaç hedeflerinin hastalıkla genetik ilişkisi (en güçlü hedef; 0–1)
     biology     hedeflerin genetik dışı bağımsız biyolojik kanıtı: hayvan modeli, gen ifadesi, yolak (0–1)
     network     hedeflerin protein ağında hastalık genlerine yakınlığı (derece eşlemeli z-skoru, en yakın hedef)
+    similar     komşu hastalık kanıtı: ilaç, bu hastalığa en benzer hastalıklarda kesit yılından önce klinik çalışmaya
+                girmiş mi (benzerlik ağırlıklı toplam; sources.trial_atlas). Benzerlik de kesitten önce iki hastalıkta
+                denenmiş ilaç kümelerinden hesaplanır: kanal tam zaman dilimlidir ve hastalığın kendi literatüründen
+                bağımsızdır. 48 hastalıklık panelde tek başına AP 0,122 (sıklık 0,079).
 
 Ek sütunlar (sıralama kanalı değil, açıklayıcı/denetim): base (mevcut yöntem puanı), penalty (zarar sinyali çarpanı),
 frequency (ilacın hastalık ve köprü gen literatüründe toplam anılma sayısı: popülerlik; geriye dönük testteki
@@ -29,6 +33,7 @@ zaten denenmiş ilaçları kodlar (cevabı önceden görmek olur), ikincisi lite
 
 from __future__ import annotations
 
+import datetime
 import math
 from collections import defaultdict
 from typing import Dict, Iterable, Optional
@@ -36,7 +41,7 @@ from typing import Dict, Iterable, Optional
 import pandas as pd
 
 RECENT_YEARS = 5
-CHANNELS = ("lit", "mech", "direct", "recent", "accel", "genetic", "biology", "network")
+CHANNELS = ("lit", "mech", "direct", "recent", "accel", "genetic", "biology", "network", "similar")
 GENETIC_TYPES = ("genetic_association", "somatic_mutation")
 BIOLOGY_TYPES = ("animal_model", "rna_expression", "affected_pathway")
 
@@ -77,6 +82,9 @@ def build(
     universe verilirse tablo tam olarak bu anahtarları içerir (literatürde puanı olmayan ilaçlar da, 0 değerle);
     verilmezse sıralamadaki ilaçlar ile genetik/ağ kanıtı olan ilaçların birleşimi alınır.
     external: {"genetic": {SEMBOL: {veri_türü: skor}}, "network": {SEMBOL: z}} — yoksa ilgili kanallar 0 kalır.
+      Komşu hastalık kanalı için çalışma zamanında eklenen anahtarlar (Corpus doldurur, JSON'a yazılmaz):
+      "atlas" (trial_atlas.TrialAtlas), "atlas_own" (hastalıkta ilaçların ilk çalışma yılı), "atlas_codes" (hastalığın
+      MeSH kodları), "atlas_canonical" (tuz → ana molekül). Puan reference_year (geriye dönük testte kesit) itibarıyla.
     """
     drugs = drugs or {}
     drug_map = drug_map or {}
@@ -91,6 +99,11 @@ def build(
     if reference_year is None:
         years = [r.year for r in a_records if r.year]
         reference_year = max(years) if years else 0
+    similar: Dict[str, float] = {}
+    atlas = external.get("atlas")
+    if atlas is not None and use_dict:
+        similar, _ = atlas.neighbor_scores(external.get("atlas_own") or {}, external.get("atlas_codes") or [],
+                                           cutoff=reference_year or None, canonical=external.get("atlas_canonical"))
 
     direct: Dict[str, int] = defaultdict(int)
     recent: Dict[str, int] = defaultdict(int)
@@ -152,12 +165,13 @@ def build(
             "genetic": _best(targets, genetic_table, GENETIC_TYPES),
             "biology": _best(targets, genetic_table, BIOLOGY_TYPES),
             "network": max(net, 0.0),
+            "similar": similar.get(k, 0.0),
             "prevalence": in_c.get(k, 0) / n_c,
             "frequency": float(freq.get(k, 0)),
             "n_targets": len(targets),
         })
     df = pd.DataFrame(rows, columns=["key", "base", "lit", "mech", "penalty", "ltc", "direct", "recent", "accel", "genetic",
-                                     "biology", "network", "prevalence", "frequency", "n_targets"])
+                                     "biology", "network", "similar", "prevalence", "frequency", "n_targets"])
     return df.set_index("key")
 
 
@@ -193,4 +207,27 @@ def annotate_external(ranked: pd.DataFrame, drugs: Optional[dict], drug_map: Opt
         n_col.append(f"{best_n[1]} z={best_n[0]:.1f}" if best_n[0] > 0 else "")
     out["genetic_target"] = g_col
     out["network_target"] = n_col
+    out["similar_from"] = _neighbor_reasons(out, drug_map, external)
     return out
+
+
+def _neighbor_reasons(ranked: pd.DataFrame, drug_map: dict, external: dict, top: int = 3) -> list:
+    """Komşu hastalık kanıtının gerekçesi: ilacın denendiği en benzer hastalıklar ("Uveitis 0.22; Retinal Vasculitis 0.33")."""
+    atlas = external.get("atlas")
+    if atlas is None or not len(ranked):
+        return [""] * len(ranked)
+    _, used = atlas.neighbor_scores(external.get("atlas_own") or {}, external.get("atlas_codes") or [], cutoff=None,
+                                    canonical=external.get("atlas_canonical"))
+    sets = atlas.tried_before(_this_year())
+    canonical = external.get("atlas_canonical") or {}
+    col = []
+    for cid in ranked["chemical_id"]:
+        k = drug_map.get(cid, cid)
+        k = canonical.get(k, k)
+        hits = [f"{u['name'] or u['mesh']} {u['similarity']:.2f}" for u in used if k in sets.get(u["mesh"], set())]
+        col.append("; ".join(hits[:top]))
+    return col
+
+
+def _this_year() -> int:
+    return datetime.date.today().year

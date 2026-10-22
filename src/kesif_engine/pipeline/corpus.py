@@ -17,7 +17,7 @@ from kesif_engine.evaluation import labels
 from kesif_engine.extraction import drugmap
 from kesif_engine.pipeline.settings import load_settings
 from kesif_engine.scoring.ranking import Rec, select_bridges
-from kesif_engine.sources import chembl, genes, pubmed, pubtator
+from kesif_engine.sources import chembl, genes, pubmed, pubtator, trial_atlas
 
 log = logging.getLogger("kesif")
 
@@ -165,6 +165,17 @@ class Corpus:
             # denetimde yanlış bulunan etiket: ana molekül ve tüm tuz biçimleri ölçümden çıkar
             self.labels = {**self.labels, "audit_excluded": sorted(k for k, p in canonical.items() if p in wrong or k in wrong)}
         (wd / "drug_map.json").write_text(json.dumps(self.drug_map, ensure_ascii=False, indent=1), encoding="utf-8")
+        self._attach_atlas(canonical)
+
+    def _attach_atlas(self, canonical: dict) -> None:
+        """Komşu hastalık kanalı: klinik çalışma atlası varsa kanal tablosuna (features.build) çalışma zamanı girdisi
+        olarak eklenir. Atlas yoksa kanal 0 kalır ve benchmark bu kanallı modeli hiç denemez."""
+        atlas = trial_atlas.load()
+        if atlas is None or not self.labels:
+            return
+        codes = [c for c in (self.cfg.get("mesh_id", ""), self.disease_id) if c]
+        self.external = {**self.external, "atlas": atlas, "atlas_own": self.labels.get("first_trial_year") or {},
+                         "atlas_codes": codes, "atlas_canonical": canonical}
 
     def _detect_disease_id(self) -> str:
         """Hastalığın PubTator kimliğini makalelerden bulur: hastalık literatüründe en sık etiketlenen hastalık.

@@ -133,6 +133,9 @@ class LogisticFusion:
 
 STACK_FEATURES = ["frequency", "direct", "recent", "accel", "lit", "mech", "ltc", "genetic", "biology", "network",
                   "prevalence"]
+# Komşu hastalık kanalı eklenmiş model (Faz 2). Benchmark "stack" ile "stack_komsu"yu aynı kuralla karşılaştırır;
+# kayıtlı modelin özellik listesi to_dict ile saklandığı için tahminde ikisi de aynı sınıfla çalışır.
+STACK_SIM_FEATURES = STACK_FEATURES + ["similar"]
 
 
 class StackFusion:
@@ -283,7 +286,8 @@ def apply_to_candidates(ranked: pd.DataFrame, features: pd.DataFrame, decision: 
     """
     out = ranked.copy()
     if not len(out):
-        for col in ("method_score", "direct_score", "recent_score", "genetic_score", "biology_score", "network_score", "n_channels", "fusion"):
+        for col in ("method_score", "direct_score", "recent_score", "genetic_score", "biology_score", "network_score",
+                    "similar_score", "n_channels", "fusion"):
             out[col] = []
         return out
     drug_map = drug_map or {}
@@ -292,7 +296,7 @@ def apply_to_candidates(ranked: pd.DataFrame, features: pd.DataFrame, decision: 
     method = (decision or {}).get("method", "base")
     fused = fused_score(features, decision).reindex(keys).fillna(0.0)
     out["method_score"] = out["score"]
-    for ch in ("direct", "recent", "accel", "genetic", "biology", "network"):
+    for ch in ("direct", "recent", "accel", "genetic", "biology", "network", "similar"):
         out[f"{ch}_score"] = f[ch].round(4).to_numpy() if ch in f.columns else 0.0
     out["n_channels"] = (f[list(c for c in CHANNELS if c in f.columns)] > 0).sum(axis=1).astype(int).to_numpy()
     out["fusion"] = method

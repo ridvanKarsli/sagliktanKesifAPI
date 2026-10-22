@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import json
 
+from kesif_engine.evaluation import atlas as atlas_build
 from kesif_engine.sources import clinicaltrials, trial_atlas
 
 DRUGS = [
@@ -48,7 +49,7 @@ TRIALS = [
 
 def test_build_first_years_and_exclusions(tmp_path):
     out = tmp_path / "atlas.json.gz"
-    atlas = trial_atlas.build(TRIALS, DRUGS, 1.0, out=out)
+    atlas = atlas_build.build(TRIALS, DRUGS, 1.0, out=out)
     fy = atlas["first_year"]
     assert fy["D1"] == {"C_A": 2005, "C_B": 2006, "C_C": 2007}
     assert fy["D2"]["C_D"] == 2008          # tuz biçimi ana moleküle
@@ -60,7 +61,7 @@ def test_build_first_years_and_exclusions(tmp_path):
 
 
 def test_neighbor_scores_time_sliced(tmp_path):
-    atlas = trial_atlas.TrialAtlas(trial_atlas.build(TRIALS, DRUGS, 1.0, out=tmp_path / "a.json.gz"))
+    atlas = trial_atlas.TrialAtlas(atlas_build.build(TRIALS, DRUGS, 1.0, out=tmp_path / "a.json.gz"))
     own = {"C_A": 2005, "C_B": 2006, "C_C": 2007}
     canonical = {"C_DHCL": "C_D"}
     s, used = atlas.neighbor_scores(own, ["MESH:D1"], cutoff=2010, canonical=canonical)
@@ -82,3 +83,23 @@ def test_direct_mesh_parsed_separately():
     assert trial_atlas._direct_mesh(payload) == {"NCT1": [("D001172", "Arthritis, Rheumatoid")]}
     t = clinicaltrials.parse_trials(payload)[0]
     assert set(t["condition_mesh"]) == {"D001172", "D001168"}
+
+
+def test_features_similar_channel_respects_reference_year(tmp_path):
+    import pandas as pd
+
+    from kesif_engine.scoring import features, fusion
+
+    atlas = trial_atlas.TrialAtlas(atlas_build.build(TRIALS, DRUGS, 1.0, out=tmp_path / "a.json.gz"))
+    drugs = {d["chembl_id"]: d for d in DRUGS}
+    ext = {"atlas": atlas, "atlas_own": {"C_A": 2005, "C_B": 2006, "C_C": 2007}, "atlas_codes": ["D1"],
+           "atlas_canonical": {"C_DHCL": "C_D"}}
+    f10 = features.build(pd.DataFrame(), [], [], drugs, {}, ext, universe=["C_D", "C_E"], reference_year=2010)
+    f16 = features.build(pd.DataFrame(), [], [], drugs, {}, ext, universe=["C_D", "C_E"], reference_year=2016)
+    assert f10.loc["C_D", "similar"] > 0
+    assert f16.loc["C_E", "similar"] > f10.loc["C_E", "similar"]
+    assert "similar" in features.available_channels(f10)
+    assert "similar" in fusion.STACK_SIM_FEATURES and "similar" not in fusion.STACK_FEATURES
+    ranked = pd.DataFrame({"chemical_id": ["C_D", "C_A"]})
+    notes = features.annotate_external(ranked, drugs, {}, ext)["similar_from"].tolist()
+    assert "Disease two" in notes[0]

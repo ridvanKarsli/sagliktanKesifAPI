@@ -116,7 +116,9 @@ def leakage_report(external: Optional[dict], gene_counts: Optional[dict], use_di
         not_sliced.append({"input": "genetik ilişki", "detail": "bugünkü genetik veri; bilinen ilaç ve literatür kanıtı dışlanmış"})
     if ext.get("network"):
         not_sliced.append({"input": "protein ağı", "detail": "bugünkü etkileşim ağı; metin madenciliği kenarları dışlanmış"})
-    return {"time_sliced": TIME_SLICED, "not_time_sliced": not_sliced}
+    sliced = list(TIME_SLICED) + (["komşu hastalık atlası (ilaç kümeleri ve benzerlik kesitten önceki çalışmalarla)"]
+                                  if ext.get("atlas") is not None else [])
+    return {"time_sliced": sliced, "not_time_sliced": not_sliced}
 
 
 def backtest(
