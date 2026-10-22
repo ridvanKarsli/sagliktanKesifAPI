@@ -1,0 +1,25 @@
+# Geliştirme veritabanı: yalnızca PostgreSQL, yalnızca bu bilgisayardan erişilir (127.0.0.1).
+# Kullanım: POSTGRES_PASSWORD=... docker compose -f docker-compose.dev.yml up -d
+# .env içinde: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5432/kesif
+name: sagliktan-kesif-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kesif
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      POSTGRES_DB: kesif
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kesif -d kesif"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  pgdata-dev:

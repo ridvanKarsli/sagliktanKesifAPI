@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -172,9 +173,14 @@ class RecordingWorkspace:
         return 3
 
 
+# KESIF_TEST_DATABASE_URL verilirse (ör. postgresql+psycopg://kesif@localhost:5432/kesif_test) sunucu testleri o
+# veritabanında koşar; her testten önce şema sıfırlanır. Verilmezse bellek içi SQLite.
+TEST_DB = os.environ.get("KESIF_TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
+
+
 @pytest.fixture
 def settings(tmp_path):
-    return Settings(env="test", database_url="sqlite+pysqlite:///:memory:", work_dir=tmp_path / "work",
+    return Settings(env="test", database_url=TEST_DB, work_dir=tmp_path / "work",
                     auth_mode="local", bootstrap_admin_email="admin@test.com", bootstrap_admin_password="secretpass123",
                     rate_limit_per_minute=0, log_level="WARNING")
 
@@ -190,6 +196,8 @@ def container(settings, fakes):
     c = Container(settings, engine=fakes["engine"], reader=fakes["reader"], catalog_port=fakes["catalog"], services=fakes["services"],
                   queue=SynchronousQueue(lambda rid: holder["c"].execute_run(rid)), workspace=fakes["workspace"])
     holder["c"] = c
+    if not TEST_DB.startswith("sqlite"):
+        Base.metadata.drop_all(c.db_engine)
     Base.metadata.create_all(c.db_engine)
     c.execute_run._retry_delay = 0
     c.startup()

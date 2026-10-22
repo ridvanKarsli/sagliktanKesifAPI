@@ -269,6 +269,28 @@ def panel(add: bool = typer.Option(False, "--add", help="Katalogda olmayan panel
         typer.echo(f"{added} hastalık eklendi. Her biri için analiz çalıştırın (kesif run <anahtar>), sonra: kesif benchmark")
 
 
+@app.command("db-copy")
+def db_copy(source: str = typer.Argument(..., help="Kaynak veritabanı adresi (ör. sqlite:///./kesif.db)"),
+            target: str = typer.Argument(..., help="Hedef veritabanı adresi (ör. postgresql+psycopg://kesif:...@localhost:5432/kesif)")):
+    """Veritabanını eksiksiz kopyalar ve doğrular (SQLite → PostgreSQL geçişi). Hedefte şema önceden kurulmuş olmalı
+    (KESIF_DATABASE_URL=<hedef> kesif migrate) ve hedef boş olmalı. Doğrulama: tablo başına satır sayısı ve motor
+    dosyalarının SHA-256 bütünlüğü. Doğrulama geçmezse çıkış kodu 1 olur."""
+    from ...infrastructure.db.copy import copy_database
+    from ...infrastructure.db.session import make_engine
+
+    report = copy_database(make_engine(source), make_engine(target), progress=typer.echo)
+    v = report["verification"]
+    for name, r in v["tables"].items():
+        typer.echo(f"  {'✓' if r['ok'] else '✗'} {name}: kaynak {r['kaynak']}, hedef {r['hedef']}")
+    ef = v["engine_files"]
+    if "n_files" in ef:
+        typer.echo(f"  {'✓' if ef['ok'] else '✗'} motor dosyaları: {ef['n_files']} dosya, {ef['bytes_target']:,} / {ef['bytes_source']:,} bayt, "
+                   f"özeti tutmayan {len(ef['sha256_mismatch'])}")
+    typer.echo("DOĞRULAMA GEÇTİ" if v["ok"] else "DOĞRULAMA BAŞARISIZ")
+    if not v["ok"]:
+        raise typer.Exit(1)
+
+
 @app.command("run-panel")
 def run_panel(only: Optional[List[str]] = typer.Option(None, "--only", help="Yalnızca bu panel hastalıkları"),
               redo: bool = typer.Option(False, help="Analizi tamamlanmış hastalıkları da yeniden çalıştır"),

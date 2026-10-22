@@ -72,43 +72,51 @@ her zaman aynı sıralamayı verir (`tests/engine/test_determinism.py`).
 | `lit` | hastalık → köprü gen → ilaç dolaylı bağı (Swanson ABC, lift ve bağlam ağırlıklı) | makaleler |
 | `mech` | ilacın bilinen hedefi köprü genlerden biri mi | ilaç veritabanı |
 | `direct`, `recent` | ilacın hastalık literatüründe doğrudan ve son 5 yılda anılması | makaleler |
+| `accel` | kanıt ivmesi: (1 + son 5 yıldaki anılma) / √(1 + önceki anılma) — ilginin hızlanması | makaleler |
 | `genetic` | ilaç hedefinin hastalıkla genetik ilişkisi (bilinen ilaç ve literatür kanıtı **dışlanır**) | Open Targets |
 | `biology` | hayvan modeli, gen ifadesi, yolak kanıtı | Open Targets |
 | `network` | hedefin protein ağında hastalık genlerine yakınlığı: RWR + iki yönlü derece eşlemeli z-skoru (metin madenciliği kenarları **dışlanır**) | STRING |
+| `frequency` | popülerlik: hastalık ve köprü gen literatüründe toplam anılma (aynı zamanda taban çizgisi) | makaleler |
 
-Birleştirme seçenekleri ve seçim kuralı (`evaluation/benchmark.py`):
+Birleştirme seçenekleri (`evaluation/benchmark.py`, `scoring/fusion.py`):
 
 - **Temel yöntem:** literatür köprüsü + mekanizma, zarar cezasıyla.
-- **Kanal birleştirme (RRF, Cormack 2009):** her kanaldaki sıranın `1/(60+sıra)` toplamı; ölçekten bağımsız, eğitim gerektirmez.
-- **Öğrenen birleştirme:** kanıt kanallarının katsayısı negatif olamayan, açıklanabilir lojistik model; yalnızca
-  eğitimde görmediği hastalıkta ölçülür (hastalık dışarıda bırakılarak).
-- Seçim: her hastalık 2012, 2015 ve 2018 kesitlerinde test edilir; bir yöntem temel yöntemi eşleştirilmiş farkın %90
-  güven aralığıyla geçmedikçe benimsenmez. Paneldeki kontrol hastalıkları karara katılmaz, sonradan raporlanır.
+- **Kanal birleştirme (RRF, Cormack 2009):** `rrf_core` (literatür kanalları), `rrf_ivme` (ivme + literatür), `rrf_all`.
+- **Öğrenen birleştirme (`logistic`):** hastalık içi yüzdelik sıraya çevrilmiş kanallarla, katsayıları negatif olamayan
+  lojistik model.
+- **Popülerlik üstüne bilgi (`stack`, şu an kullanılan):** kanalların ham (log) büyüklükleriyle eğitilen lojistik
+  model, popülerlik sırasıyla RRF ile birleştirilir. Yüzdelik dönüşüm mutlak büyüklüğü (ivme 30 mu 2 mi) sildiği için
+  zayıftı; popülerlikle birleşim, sonradan yeniden denenen eski ve çok yazılmış ilaçları üstte tutarken modelin
+  bulduğu genetik/ağ kanıtlı ve yükselen adayları yukarı taşır.
+- Öğrenen yöntemler her hastalıkta, o hastalık eğitimden çıkarılarak ölçülür.
+- **Seçim kuralı (dayanıklılık):** her hastalık 2012, 2015 ve 2018 kesitlerinde test edilir. Temel yöntemi eşleştirilmiş
+  farkın %90 güven aralığıyla geçen ve faz 2+ etiketinde gerilemeyen adaylar arasından, sıklık sıralamasına göre farkın
+  alt sınırı en kötü sette (karar seti ve kontrol hastalıkları) en yüksek olan seçilir.
 
-Geliştirme ölçümü (Behçet, ailesel Akdeniz ateşi, retinitis pigmentosa; 9 test; klinik çalışma etiketi; ortalama AP),
-etiket temizliğinden sonra: temel yöntem 0,181, kanal birleştirme 0,186 (fark %90 GA [−0,017; 0,025]), öğrenen model
-0,166, bağlantı terimi sayısı (LTC) 0,161, sıklık 0,087, rastgele 0,009. Temizlikten önce kanal birleştirme anlamlı
-biçimde öndeydi; kazancın bir kısmı aynı ilacın tuz biçimlerinin ayrı sayılmasından geliyordu. Fark artık anlamlı
-olmadığı için paketle gelen karar temel yöntemdir; kurulum `kesif benchmark` çalıştırdığında kendi ölçümü bunun yerini
-alır. Genetik ve ağ kanalları birleştirmeye ancak ölçümde katkıları gösterilirse girer.
+**Doğrulama etiketleri** (`evaluation/labels.py`, şema 6): yalnızca girişimsel, tedavi/önleme amaçlı çalışmaların
+deneysel kolundaki ilaçlar. Çalışma hedef hastalığa ait olmalıdır: ClinicalTrials.gov MeSH kodu (ya da üst kodu) tutmalı
+**ve** hastalığın adı (elle derlenmiş sözlük, `resources/disease_terms.json`) hastalık listesinde ya da başlıkta geçmeli
+(“pulmonary hypertension” hipertansiyon sayılmaz, Sjögren romatoid artrit sayılmaz). Sayılmayanlar: karşılaştırma ya da
+her kolda bulunan zemin ilaçları, tanı ajanları, sağlıklı gönüllü faz 1, ilaç etkileşimi/farmakokinetik, nakil, hücre
+ve gen tedavisi destek ilaçları, sedasyon/anestezi/ameliyat çevresi kullanımlar, eşlik eden hastalık çalışmaları, ilaç
+bırakma çalışmaları, sınıf adlarının tek ilaca eşlenmesi. İlk elle denetimde hata %30'du; bütün aday havuzu
+(48 hastalık, 2.711 satır) elle denetlendi, yanlışlar ölçümden çıkar. Bağımsız ikinci denetçiyle uyum %98.
 
-Değerlendirilip alınmayanlar: graf sinir ağları (TxGNN gibi; GPU, açıklanamayan karar ve tekrarlanabilirlik sorunu),
-gen ifadesi imza eşleştirme (CMap/LINCS; lisans ve hastalık başına imza gerekliliği).
+**Kapı 1** (`kesif benchmark` çıktısı): ≥ 25 hastalık; ölçüme giren etiketlerde kalan hata < %5 (ham hata × (1 − denetim
+kapsamı)); kullanılan yöntem sıklık, LTC ve tek başına ağ yakınlığı taban çizgilerini %90 güven aralığıyla geçiyor;
+**kesin doğrulama:** yöntem tasarlanırken hiç bakılmamış hastalıklarda (panelde `final: true`) sıklığa göre farkın %90
+alt sınırı > 0. Doğrulama hastalıklarının verisi yoksa kapı açılmaz.
 
-**Doğrulama etiketleri** (`evaluation/labels.py`, şema 3): yalnızca girişimsel, tedavi/önleme amaçlı çalışmaların
-deneysel kolundaki ilaçlar sayılır. Karşılaştırma ya da plasebo kolunda da bulunan ilaçlar (arka plan tedavisi), tanı
-ajanları, görüntüleme izleyicileri ve yardımcı maddeler, 5'ten fazla hastalık listeleyen şemsiye çalışmalar sayılmaz;
-tuz biçimleri ana moleküle birleşir. İkinci etiket `trials_late` yalnızca faz 2+ çalışmalardır; bir yöntem birincil
-etikette kazanıp bu etikette geriliyorsa benimsenmez. `kesif label-audit` her hastalıktan örnek çıkarır, yanlış
-bulunanlar ölçümden çıkar ve hata oranı Kapı 1'e girer. Her geriye dönük test, kesite göre dilimlenemeyen girdileri
-(ilaç sözlüğü, gen arka plan sayıları, genetik, ağ) `leakage` alanında ayrıca raporlar.
+Faz 1 sonucu (22 Ekim 2026): 32 karar hastalığı × 3 kesit, `stack` sıklığa göre +0,022 [+0,009; +0,037], temel yönteme
+göre +0,034; kontrol hastalıklarında alt sınır +0,014; hiç görülmemiş 10 hastalıkta (bronşektazi, çölyak, kronik ürtiker,
+esansiyel tremor, fibromiyalji, Graves, narkolepsi, PSK, huzursuz bacak, üveit) sıklığa göre **+0,029 [+0,015; +0,045]**,
+29 testin 27'sinde önde. Daha önce kullanılmış doğrulama setleri (6 hastalık) geliştirme setine alınmıştır; her yeni
+yöntem denemesi yeni, hiç görülmemiş hastalıklarla doğrulanır.
 
-**Kapı 1** (`kesif benchmark` çıktısı): ≥ 25 hastalık ölçülmüş, etiket hatası < %5 ve kullanılan yöntem sıklık, LTC ve
-(varsa) tek başına ağ yakınlığı taban çizgilerini %90 güven aralığıyla geçiyor.
+Değerlendirilip alınmayanlar: graf sinir ağları (GPU, açıklanamayan karar), ağaç tabanlı birleştirme (hastalıklar arası
+genelleşmedi), hastalık türüne göre değişen ağırlıklar (bugünkü veriyle ek kazanç yok).
 
 **Yöntem güveni** (`insights/confidence.py`): her hastalık için ölçüme dayalı not — yüksek / orta / düşük / ölçülemedi.
-Rastgeleye oran, sıklık sıralamasına göre durum, ilk 25'teki isabet ve örnek sayısından kural tabanlı türetilir;
-arayüzde ve raporda gerekçeleriyle gösterilir (ör. retinitis pigmentosa'da "düşük": listenin başında doğrulanan ilaç yok).
 
 İlkeler:
 
@@ -132,6 +140,18 @@ cp .env.example .env
 kesif migrate
 kesif api --reload
 ```
+
+Veritabanı geliştirmede de PostgreSQL'dir (canlıyla aynı). Yerel PostgreSQL:
+
+```bash
+POSTGRES_PASSWORD=<parola> docker compose -f docker-compose.dev.yml up -d
+# .env: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5432/kesif
+kesif migrate
+```
+
+SQLite'tan geçiş: `KESIF_DATABASE_URL=<pg> kesif migrate` ve `kesif db-copy sqlite:///./kesif.db <pg>`. Komut tabloları
+yabancı anahtar sırasıyla kopyalar, satır sayılarını ve motor dosyalarının SHA-256 bütünlüğünü doğrular; doğrulama
+geçmezse hata koduyla çıkar. Sunucu testleri `KESIF_TEST_DATABASE_URL=<pg> pytest tests/server` ile PostgreSQL'de koşar.
 
 API: http://127.0.0.1:8000/api/v1/docs (OpenAPI). Arayüzü çalıştırmak için frontend reposunda `npm run dev`; ikisi aynı
 anda, ayrı terminallerde çalışır. İlk giriş: `.env` içindeki `KESIF_BOOTSTRAP_ADMIN_EMAIL` / `..._PASSWORD`.
@@ -184,8 +204,9 @@ Roller: `viewer` okur · `analyst` hastalık ekler, analiz başlatır, parametre
 | `kesif import-legacy <klasör>` | eski kurulumu al |
 | `kesif doctor` | dış veri kaynaklarını denetle |
 | `kesif benchmark` | derlemi hazır hastalıklarda yöntem karnesi; birleştirme kararını ölçümle günceller |
-| `kesif panel --add` | 32 hastalıklık ölçüm panelini kataloğa ekle (6'sı karara katılmayan kontrol) |
+| `kesif panel --add` | 48 hastalıklık ölçüm panelini kataloğa ekle (6 kontrol, 10 kesin doğrulama) |
 | `kesif run-panel` | paneldeki hastalıkları sırayla analiz et; tamamlananları atlar, hata vereni geçer |
+| `kesif db-copy <kaynak> <hedef>` | veritabanını eksiksiz kopyala ve doğrula (SQLite → PostgreSQL) |
 | `kesif label-audit <hastalık>` | etiketlerden 50 satırlık denetim örneği çıkar; `--import <csv>` ile işaretlenmişi geri al |
 
 ## Test ve kalite
