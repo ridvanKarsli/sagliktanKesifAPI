@@ -11,6 +11,7 @@
   kesif panel              ölçüm paneli hastalıklarını listele / kataloğa ekle
   kesif run-panel          paneldeki hastalıkları sırayla analiz et (kaldığı yerden sürer)
   kesif label-audit        doğrulama etiketlerinden denetim örneği çıkar / işaretlenmişi içe al
+  kesif atlas              ClinicalTrials.gov klinik çalışma atlasını indir ve derle (komşu hastalık kanalı)
 """
 
 from __future__ import annotations
@@ -348,6 +349,35 @@ def run_panel(only: Optional[List[str]] = typer.Option(None, "--only", help="Yal
     typer.echo(f"\nTamamlanan {len(done)}, atlanan {len(skipped)}, başarısız {len(failed)}"
                + (f" ({', '.join(failed)})" if failed else ""))
     typer.echo("Sonraki adım: kesif benchmark")
+
+
+@app.command()
+def atlas(download: bool = typer.Option(True, help="Ham çalışmaları indir (kaldığı yerden sürer)"),
+          build: bool = typer.Option(True, help="İndirilenlerden atlası derle ve veritabanına kaydet"),
+          restart: bool = typer.Option(False, help="İndirmeyi baştan başlat")):
+    """Tüm girişimsel ilaç çalışmalarından "ilaç × hastalık × ilk yıl" atlası. İndirme bir kez yapılır (~30–60 dk);
+    ham dosya yalnızca yerelde kalır, derlenmiş atlas paylaşılan kapsamda veritabanına yazılır."""
+    import logging
+
+    from kesif_engine.core import config as engine_config
+    from kesif_engine.sources import chembl, trial_atlas
+
+    from ...container import get_container
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    c = get_container()
+    c.startup()
+    ws = c.workspace_impl
+    ws.prepare()
+    if download:
+        trial_atlas.download(progress=typer.echo, restart=restart)
+    if build:
+        drugs = chembl.load()
+        if not drugs:
+            typer.echo("İlaç sözlüğü yok; önce bir hastalık analizi çalıştırın.", err=True)
+            raise typer.Exit(2)
+        trial_atlas.build(trial_atlas.iter_raw(), drugs, engine_config.MIN_PHASE, progress=typer.echo)
+        ws.save()
 
 
 @app.command("label-audit")
