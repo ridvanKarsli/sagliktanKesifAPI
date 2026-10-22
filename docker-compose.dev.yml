@@ -1,6 +1,7 @@
 # Geliştirme veritabanı: yalnızca PostgreSQL, yalnızca bu bilgisayardan erişilir (127.0.0.1).
 # Kullanım: POSTGRES_PASSWORD=... docker compose -f docker-compose.dev.yml up -d
-# .env içinde: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5432/kesif
+# .env içinde: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5433/kesif
+# Port varsayılan 5433 (5432 çoğu bilgisayarda başka bir PostgreSQL tarafından kullanılıyor); KESIF_PG_PORT ile değişir.
 name: sagliktan-kesif-dev
 
 services:
@@ -11,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
       POSTGRES_DB: kesif
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${KESIF_PG_PORT:-5433}:5432"
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
     healthcheck:

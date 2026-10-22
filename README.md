@@ -145,7 +145,7 @@ Veritabanı geliştirmede de PostgreSQL'dir (canlıyla aynı). Yerel PostgreSQL:
 
 ```bash
 POSTGRES_PASSWORD=<parola> docker compose -f docker-compose.dev.yml up -d
-# .env: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5432/kesif
+# .env: KESIF_DATABASE_URL=postgresql+psycopg://kesif:<parola>@localhost:5433/kesif  (port: KESIF_PG_PORT)
 kesif migrate
 ```
 
