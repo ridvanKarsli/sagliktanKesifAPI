@@ -250,3 +250,12 @@ def test_novelty_survives_a_single_failing_candidate():
     df = pd.DataFrame([{"chemical": "good", "aliases": ""}, {"chemical": 'bad "name', "aliases": ""}])
     out = novelty.add_novelty(Client(), df, {"name_en": "X", "pubmed_query": "x"}, top_n=2)
     assert out["pubmed_direct"].iloc[0] == 5 and pd.isna(out["pubmed_direct"].iloc[1]) and list(out["durum"])[1] == ""
+
+
+def test_pubmed_json_tolerates_control_characters():
+    from kesif_engine.sources import pubmed
+
+    class R:
+        text = '{"esearchresult": {"count": "2", "idlist": ["1", "2"], "querytranslation": "a\tb\x01"}}'
+
+    assert pubmed._json(R())["esearchresult"]["idlist"] == ["1", "2"]

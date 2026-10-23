@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import json
 import re
 from typing import Optional
 
@@ -30,6 +31,13 @@ def _params(extra: dict) -> dict:
     return params
 
 
+
+def _json(resp) -> dict:
+    """Katı olmayan JSON: PubMed yanıtı bazen ham denetim karakteri taşıyor (şizofreni tedavi sorgusunda görüldü)."""
+    text = getattr(resp, "text", None)
+    return json.loads(text, strict=False) if isinstance(text, str) else resp.json()
+
+
 def search_pmids(
     client: HttpClient,
     query: str,
@@ -45,13 +53,13 @@ def search_pmids(
     if sort:
         extra["sort"] = sort
     resp = client.request("GET", f"{EUTILS}/esearch.fcgi", params=_params(extra))
-    return list(resp.json()["esearchresult"].get("idlist", []))
+    return list(_json(resp)["esearchresult"].get("idlist", []))
 
 
 def count(client: HttpClient, query: str) -> int:
     extra = {"db": "pubmed", "term": query, "retmode": "json", "retmax": 0}
     resp = client.request("GET", f"{EUTILS}/esearch.fcgi", params=_params(extra))
-    result = resp.json().get("esearchresult") or {}
+    result = _json(resp).get("esearchresult") or {}
     if "count" not in result:
         # PubMed sorguyu ayrıştıramazsa sayı yerine hata döndürür; 0 saymak "hiç makale yok" demek olur, yanlış
         raise ValueError(f"PubMed sorguyu işleyemedi: {str(result.get('ERROR') or result)[:120]}")
@@ -63,7 +71,7 @@ def count_by_year(client: HttpClient, query: str, start_year: int, end_year: int
     for year in range(start_year, end_year + 1):
         extra = {"db": "pubmed", "term": query, "retmode": "json", "retmax": 0, "datetype": "pdat", "mindate": str(year), "maxdate": str(year)}
         resp = client.request("GET", f"{EUTILS}/esearch.fcgi", params=_params(extra))
-        out[year] = int(resp.json()["esearchresult"]["count"])
+        out[year] = int(_json(resp)["esearchresult"]["count"])
     return out
 
 
@@ -115,7 +123,7 @@ def fetch_meta(client: HttpClient, pmids: list) -> dict:
         batch = pmids[i : i + 200]
         extra = {"db": "pubmed", "id": ",".join(batch), "retmode": "json"}
         resp = client.request("POST", f"{EUTILS}/esummary.fcgi", data=_params(extra))
-        result = resp.json().get("result", {})
+        result = _json(resp).get("result", {})
         for uid in result.get("uids", []):
             item = result[uid]
             year = _year(item.get("pubdate", "")) or _year(item.get("sortpubdate", ""))
