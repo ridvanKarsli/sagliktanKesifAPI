@@ -12,6 +12,7 @@
   kesif run-panel          paneldeki hastalıkları sırayla analiz et (kaldığı yerden sürer)
   kesif label-audit        doğrulama etiketlerinden denetim örneği çıkar / işaretlenmişi içe al
   kesif atlas              ClinicalTrials.gov klinik çalışma atlasını indir ve derle (komşu hastalık kanalı)
+  kesif ledger             tahmin defteri: yeni adayları dondur, özeti doğrula, sonradan doğrulanmayı ölç
 """
 
 from __future__ import annotations
@@ -379,6 +380,83 @@ def atlas(download: bool = typer.Option(True, help="Ham çalışmaları indir (k
             raise typer.Exit(2)
         atlas_build.build(trial_atlas.iter_raw(), drugs, engine_config.MIN_PHASE, progress=typer.echo)
         ws.save()
+
+
+ledger_app = typer.Typer(no_args_is_help=True, help="Tahmin defteri (zaman damgalı, değiştirilemez hipotez listesi)")
+app.add_typer(ledger_app, name="ledger")
+
+
+@ledger_app.command("freeze")
+def ledger_freeze(top: int = typer.Option(20, help="Hastalık başına aday sayısı"),
+                  ledger_id: Optional[str] = typer.Option(None, "--id", help="Defter kimliği (varsayılan: bugünün tarihi)"),
+                  note: str = typer.Option("", help="Deftere not"),
+                  only: Optional[List[str]] = typer.Option(None, "--only", help="Yalnızca bu hastalıklar")):
+    """Sıralaması güncel bütün hastalıklardan ilk N yeni adayı dondurur ve SHA-256 özetini yazar."""
+    import logging
+
+    from kesif_engine.pipeline import ledger
+
+    from ...container import get_container
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    c = get_container()
+    c.startup()
+    ws = c.workspace_impl
+    keys = only or [v.disease.key for v in c.list_diseases() if not v.disease.is_removed]
+    for key in keys:
+        ws.prepare(key)
+    m = ledger.freeze(keys, top=top, ledger_id=ledger_id, note=note)
+    ws.save()
+    typer.echo(f"Defter {m['ledger_id']}: {m['n_diseases']} hastalık, {m['n_entries']} aday, {m['frozen_at_utc']}")
+    if m["skipped"]:
+        typer.echo("Atlanan: " + ", ".join(f"{k} ({v})" for k, v in m["skipped"].items()))
+    typer.echo(f"SHA-256: {m['sha256']}")
+    typer.echo(f"Dosya: {ledger.ledger_root() / m['ledger_id'] / 'entries.json'}")
+
+
+@ledger_app.command("verify")
+def ledger_verify(ledger_id: str):
+    """Defter içeriğinin özeti kayıtlı özetle aynı mı?"""
+    from kesif_engine.pipeline import ledger
+
+    from ...container import get_container
+
+    c = get_container()
+    c.startup()
+    c.workspace_impl.prepare()
+    r = ledger.verify(ledger_id)
+    typer.echo(f"{'✓ değişmemiş' if r['ok'] else '✗ DEĞİŞMİŞ'}  {r['sha256']}")
+    if not r["ok"]:
+        raise typer.Exit(1)
+
+
+@ledger_app.command("list")
+def ledger_list():
+    """Dondurulmuş defterler."""
+    from kesif_engine.pipeline import ledger
+
+    from ...container import get_container
+
+    c = get_container()
+    c.startup()
+    c.workspace_impl.prepare()
+    for m in ledger.list_ledgers():
+        typer.echo(f"{m['ledger_id']}  {m['frozen_at_utc']}  {m['n_diseases']} hastalık, {m['n_entries']} aday  {m['sha256']}")
+
+
+@ledger_app.command("evaluate")
+def ledger_evaluate(ledger_id: str):
+    """Defterdeki adaylardan dondurmadan sonra klinik çalışmaya girenler ve rastgele beklenti (güncel atlasla)."""
+    from kesif_engine.pipeline import ledger
+
+    from ...container import get_container
+
+    c = get_container()
+    c.startup()
+    c.workspace_impl.prepare()
+    r = ledger.evaluate(ledger_id)
+    typer.echo(f"{r['hits']} / {r['n']} aday doğrulandı; rastgele beklenti {r['expected_random']}; kat {r['enrichment']}")
+    typer.echo(json.dumps(r["diseases"], ensure_ascii=False, indent=1))
 
 
 @app.command("label-audit")
