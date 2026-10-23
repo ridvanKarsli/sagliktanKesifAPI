@@ -136,6 +136,8 @@ STACK_FEATURES = ["frequency", "direct", "recent", "accel", "lit", "mech", "ltc"
 # Komşu hastalık kanalı eklenmiş model (Faz 2). Benchmark "stack" ile "stack_komsu"yu aynı kuralla karşılaştırır;
 # kayıtlı modelin özellik listesi to_dict ile saklandığı için tahminde ikisi de aynı sınıfla çalışır.
 STACK_SIM_FEATURES = STACK_FEATURES + ["similar"]
+# Popülerlikle son sıra birleştirmesinin kaldırıldığı biçim (stack_komsu_saf): benzer hastalık kanalı eklendikten sonra
+# birleştirme büyük literatürlü hastalıklarda (astım, sedef, hipertansiyon, kistik fibroz) modelin bulduğunu bastırıyordu.
 
 
 class StackFusion:
@@ -152,9 +154,12 @@ class StackFusion:
     hastalık×kesit grubunu eşit ağırlıkla sayan ve grup içinde sınıf dengeli lojistik regresyon (Newton yöntemi; numpy).
     """
 
-    def __init__(self, names: Optional[List[str]] = None, c: float = 1.0, max_iter: int = 100):
+    def __init__(self, names: Optional[List[str]] = None, c: float = 1.0, max_iter: int = 100, combine: str = "rrf"):
         self.names = list(names or STACK_FEATURES)
         self.c, self.max_iter = c, max_iter
+        # "rrf": model puanı ile popülerlik sırasının sıra birleştirmesi (Faz 1 kararı);
+        # "model": yalnız model puanı (popülerlik modelin içinde bir özellik olarak kalır)
+        self.combine = combine
         self.coef = np.zeros(len(self.names))
         self.intercept = 0.0
         self.meta: dict = {}
@@ -205,9 +210,12 @@ class StackFusion:
         return pd.Series(p, index=features.index)
 
     def predict(self, features: pd.DataFrame) -> pd.Series:
-        """Son puan: model puanı ile popülerlik sırasının sıra birleştirmesi (zarar cezası çağıran tarafta uygulanır)."""
+        """Son puan: model puanı ile popülerlik sırasının sıra birleştirmesi ya da (combine="model") yalnız model puanı.
+        Zarar cezası çağıran tarafta uygulanır."""
         if len(features) == 0:
             return pd.Series(dtype=float)
+        if self.combine == "model":
+            return self.predict_model(features)
         t = pd.DataFrame({"model": self.predict_model(features),
                           "frequency": features["frequency"].astype(float) if "frequency" in features.columns else 0.0},
                          index=features.index)
@@ -216,11 +224,11 @@ class StackFusion:
     def to_dict(self) -> dict:
         return {"type": "stack", "features": self.names, "coef": [round(float(v), 6) for v in self.coef],
                 "intercept": round(float(self.intercept), 6), "c": self.c, "transform": "log1p (ham ölçek)",
-                "combine": "rrf(model, frequency)", **self.meta}
+                "combine": "model" if self.combine == "model" else "rrf(model, frequency)", **self.meta}
 
     @classmethod
     def from_dict(cls, d: dict) -> StackFusion:
-        m = cls(d["features"], c=d.get("c", 1.0))
+        m = cls(d["features"], c=d.get("c", 1.0), combine="model" if d.get("combine") == "model" else "rrf")
         m.coef = np.array(d["coef"], dtype=float)
         m.intercept = float(d["intercept"])
         m.meta = {k: d[k] for k in ("n_rows", "n_positive", "n_groups") if k in d}

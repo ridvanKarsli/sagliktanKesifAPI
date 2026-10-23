@@ -103,3 +103,22 @@ def test_features_similar_channel_respects_reference_year(tmp_path):
     ranked = pd.DataFrame({"chemical_id": ["C_D", "C_A"]})
     notes = features.annotate_external(ranked, drugs, {}, ext)["similar_from"].tolist()
     assert "Disease two" in notes[0]
+
+
+def test_stack_combine_model_roundtrip():
+    import numpy as np
+    import pandas as pd
+
+    from kesif_engine.scoring import fusion
+
+    f = pd.DataFrame({n: np.linspace(0, 1, 6) for n in fusion.STACK_SIM_FEATURES}, index=list("abcdef"))
+    f["similar"] = [5, 0, 0, 0, 0, 4]
+    lab = pd.Series({"a": 1.0, "f": 1.0})
+    m = fusion.StackFusion(fusion.STACK_SIM_FEATURES, combine="model").fit([f], [lab])
+    d = m.to_dict()
+    assert d["combine"] == "model"
+    m2 = fusion.StackFusion.from_dict(d)
+    assert m2.combine == "model"
+    assert np.allclose(m2.predict(f).to_numpy(), m.predict_model(f).to_numpy())
+    rrf_model = fusion.StackFusion.from_dict({**d, "combine": "rrf(model, frequency)"})
+    assert rrf_model.combine == "rrf"

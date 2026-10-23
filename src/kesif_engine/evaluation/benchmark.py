@@ -119,7 +119,7 @@ def _score(method: str, f: pd.DataFrame, model: Any = None) -> pd.Series:
         return fusion.rrf(f, ACCEL_CHANNELS) * f["penalty"]
     if method == "rrf_all":
         return fusion.rrf(f, fusion.available(f)) * f["penalty"]
-    if method in ("logistic", "stack", "stack_komsu") and model is not None:
+    if method in ("logistic", "stack", "stack_komsu", "stack_komsu_saf") and model is not None:
         return model.predict(f) * f["penalty"]
     raise ValueError(method)
 
@@ -149,11 +149,12 @@ def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, 
     can_learn = len(fit_diseases) >= MIN_DISEASES
     has_similar = any("similar" in g["channels"] for g in fit_groups)
     if can_learn:
-        methods += ["logistic", "stack"] + (["stack_komsu"] if has_similar else [])
+        methods += ["logistic", "stack"] + (["stack_komsu", "stack_komsu_saf"] if has_similar else [])
     names = [n for n in LOGISTIC_FEATURES if n in ("lit", "mech", "direct", "recent", "accel", "prevalence") or has_external]
     learners = {"logistic": lambda: fusion.LogisticFusion(names), "stack": lambda: fusion.StackFusion()}
     if has_similar:
         learners["stack_komsu"] = lambda: fusion.StackFusion(fusion.STACK_SIM_FEATURES)
+        learners["stack_komsu_saf"] = lambda: fusion.StackFusion(fusion.STACK_SIM_FEATURES, combine="model")
 
     def _train(make, train_groups):
         try:
@@ -395,9 +396,10 @@ def _decide(scorecard: dict, methods: List[str], rows: List[dict], fit_diseases:
     if m == "logistic":
         model = fusion.LogisticFusion(names).fit([g["features"] for g in fit_groups], [_labels(g) for g in fit_groups])
         return {**out, "method": "logistic", "model": model.to_dict(), "weights": model.explain()}
-    if m in ("stack", "stack_komsu"):
-        feats = fusion.STACK_SIM_FEATURES if m == "stack_komsu" else fusion.STACK_FEATURES
-        stack = fusion.StackFusion(feats).fit([g["features"] for g in fit_groups], [_labels(g) for g in fit_groups])
+    if m in ("stack", "stack_komsu", "stack_komsu_saf"):
+        feats = fusion.STACK_FEATURES if m == "stack" else fusion.STACK_SIM_FEATURES
+        combine = "model" if m == "stack_komsu_saf" else "rrf"
+        stack = fusion.StackFusion(feats, combine=combine).fit([g["features"] for g in fit_groups], [_labels(g) for g in fit_groups])
         return {**out, "method": "stack", "model": stack.to_dict(), "weights": stack.explain()}
     fixed = {"rrf_core": CORE_CHANNELS, "rrf_ivme": ACCEL_CHANNELS}
     channels = fixed[m] if m in fixed else sorted({c for g in fit_groups for c in g["channels"]},
