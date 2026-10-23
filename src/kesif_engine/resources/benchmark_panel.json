@@ -422,8 +422,9 @@
   "mesh_id": "MESH:D012393",
   "pubmed_query": "\"Rosacea\"[MeSH Terms] OR rosacea[Title/Abstract]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "glaucoma",
@@ -432,8 +433,9 @@
   "mesh_id": "MESH:D005902",
   "pubmed_query": "\"Glaucoma, Open-Angle\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "osteoporosis",
@@ -442,8 +444,9 @@
   "mesh_id": "MESH:D010024",
   "pubmed_query": "\"Osteoporosis\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "schizophrenia",
@@ -452,8 +455,9 @@
   "mesh_id": "MESH:D012559",
   "pubmed_query": "\"Schizophrenia\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "pemphigus",
@@ -462,8 +466,9 @@
   "mesh_id": "MESH:D010392",
   "pubmed_query": "\"Pemphigus\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "autoimmune-hepatitis",
@@ -472,8 +477,9 @@
   "mesh_id": "MESH:D019693",
   "pubmed_query": "\"Hepatitis, Autoimmune\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "iga-nephropathy",
@@ -482,8 +488,9 @@
   "mesh_id": "MESH:D005922",
   "pubmed_query": "\"Glomerulonephritis, IGA\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "interstitial-cystitis",
@@ -492,8 +499,9 @@
   "mesh_id": "MESH:D018856",
   "pubmed_query": "\"Cystitis, Interstitial\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "giant-cell-arteritis",
@@ -502,8 +510,9 @@
   "mesh_id": "MESH:D013700",
   "pubmed_query": "\"Giant Cell Arteritis\"[MeSH Terms]",
   "hold_out": false,
-  "final": true,
-  "final_registered": "2026-10-22"
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
  },
  {
   "key": "lichen-planus",
@@ -512,7 +521,108 @@
   "mesh_id": "MESH:D008010",
   "pubmed_query": "\"Lichen Planus\"[MeSH Terms]",
   "hold_out": false,
+  "final": false,
+  "final_registered": "2026-10-22",
+  "used_as_final": "2026-10-22"
+ },
+ {
+  "key": "bullous-pemphigoid",
+  "label": "Büllöz pemfigoid",
+  "name_en": "Pemphigoid, Bullous",
+  "mesh_id": "MESH:D010391",
+  "pubmed_query": "\"Pemphigoid, Bullous\"[MeSH Terms]",
+  "hold_out": false,
   "final": true,
-  "final_registered": "2026-10-22"
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "polymyalgia-rheumatica",
+  "label": "Polimiyalji romatika",
+  "name_en": "Polymyalgia Rheumatica",
+  "mesh_id": "MESH:D011111",
+  "pubmed_query": "\"Polymyalgia Rheumatica\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "takayasu",
+  "label": "Takayasu arteriti",
+  "name_en": "Takayasu Arteritis",
+  "mesh_id": "MESH:D013625",
+  "pubmed_query": "\"Takayasu Arteritis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "dermatomyositis",
+  "label": "Dermatomiyozit",
+  "name_en": "Dermatomyositis",
+  "mesh_id": "MESH:D003882",
+  "pubmed_query": "\"Dermatomyositis\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "chronic-pancreatitis",
+  "label": "Kronik pankreatit",
+  "name_en": "Pancreatitis, Chronic",
+  "mesh_id": "MESH:D050500",
+  "pubmed_query": "\"Pancreatitis, Chronic\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "bipolar",
+  "label": "Bipolar bozukluk",
+  "name_en": "Bipolar Disorder",
+  "mesh_id": "MESH:D001714",
+  "pubmed_query": "\"Bipolar Disorder\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "tourette",
+  "label": "Tourette sendromu",
+  "name_en": "Tourette Syndrome",
+  "mesh_id": "MESH:D005879",
+  "pubmed_query": "\"Tourette Syndrome\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "kawasaki",
+  "label": "Kawasaki hastalığı",
+  "name_en": "Mucocutaneous Lymph Node Syndrome",
+  "mesh_id": "MESH:D009080",
+  "pubmed_query": "\"Mucocutaneous Lymph Node Syndrome\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "dry-eye",
+  "label": "Kuru göz",
+  "name_en": "Dry Eye Syndromes",
+  "mesh_id": "MESH:D015352",
+  "pubmed_query": "\"Dry Eye Syndromes\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
+ },
+ {
+  "key": "alcoholic-hepatitis",
+  "label": "Alkolik hepatit",
+  "name_en": "Hepatitis, Alcoholic",
+  "mesh_id": "MESH:D006519",
+  "pubmed_query": "\"Hepatitis, Alcoholic\"[MeSH Terms]",
+  "hold_out": false,
+  "final": true,
+  "final_registered": "2026-10-23"
  }
 ]

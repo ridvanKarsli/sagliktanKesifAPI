@@ -437,5 +437,78 @@
   "terms": [
    "lichen planus"
   ]
+ },
+ "MESH:D010391": {
+  "terms": [
+   "bullous pemphigoid",
+   "pemphigoid, bullous",
+   "pemphigoid"
+  ],
+  "exclude": [
+   "mucous membrane",
+   "gestationis",
+   "cicatricial"
+  ]
+ },
+ "MESH:D011111": {
+  "terms": [
+   "polymyalgia rheumatica",
+   "pmr"
+  ]
+ },
+ "MESH:D013625": {
+  "terms": [
+   "takayasu"
+  ]
+ },
+ "MESH:D003882": {
+  "terms": [
+   "dermatomyositis"
+  ],
+  "exclude": [
+   "juvenile"
+  ]
+ },
+ "MESH:D050500": {
+  "terms": [
+   "chronic pancreatitis",
+   "pancreatitis, chronic"
+  ]
+ },
+ "MESH:D001714": {
+  "terms": [
+   "bipolar",
+   "manic",
+   "mania"
+  ]
+ },
+ "MESH:D005879": {
+  "terms": [
+   "tourette",
+   "tic disorder",
+   "tics"
+  ]
+ },
+ "MESH:D009080": {
+  "terms": [
+   "kawasaki",
+   "mucocutaneous lymph node syndrome"
+  ]
+ },
+ "MESH:D015352": {
+  "terms": [
+   "dry eye",
+   "keratoconjunctivitis sicca",
+   "dry eyes",
+   "xerophthalmia"
+  ]
+ },
+ "MESH:D006519": {
+  "terms": [
+   "alcoholic hepatitis",
+   "alcohol-associated hepatitis",
+   "alcohol associated hepatitis",
+   "hepatitis, alcoholic"
+  ]
  }
 }
