@@ -19,7 +19,7 @@ from kesif_engine.core.paths import resultsdir, workdir
 from kesif_engine.core.store import JsonlCache
 from kesif_engine.evaluation import labels
 from kesif_engine.evaluation.backtest import backtest
-from kesif_engine.insights import confidence, discovery, novelty
+from kesif_engine.insights import confidence, discovery, explain, novelty
 from kesif_engine.pipeline.corpus import Corpus, _build_recs, _ensure
 from kesif_engine.pipeline.settings import load_settings, save_settings
 from kesif_engine.pipeline.status import _mark
@@ -175,6 +175,10 @@ def step_rank(disease: str, params: Optional[Params] = None, corpus: Optional[Co
     ranked = fusion.apply_to_candidates(ranked, feats, decision, corpus.drug_map, bool(corpus.drugs))
     ranked = feature_table.annotate_external(ranked, corpus.drugs, corpus.drug_map, corpus.external)
     ranked = _add_probability(ranked, decision, corpus)
+    top_rows = ranked.sort_values("score", ascending=False, kind="mergesort")
+    chains = explain.build(top_rows, feats, decision, evidence, corpus.external, corpus.drug_map,
+                           corpus.cfg.get("label") or disease, top=100, use_dict=bool(corpus.drugs))
+    ranked["kanit_zinciri"] = explain.to_column(chains, ranked["chemical_id"])
     log.info("Birleştirme: %s (%s)", decision.get("measured_as") or decision.get("method"), decision.get("origin"))
     out = resultsdir(disease)
     ranked.to_csv(out / "candidates.csv", encoding="utf-8")

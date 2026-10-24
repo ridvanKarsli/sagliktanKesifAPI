@@ -32,7 +32,7 @@ from kesif_engine.sources.clinicaltrials import CT_URL, _json, parse_trials
 
 log = logging.getLogger(__name__)
 
-SCHEMA = 1
+SCHEMA = 2  # 2: her ilk yıl için o yılı belirleyen çalışmanın NCT kimliği (first_nct; kanıt zinciri için)
 FIELDS = ("protocolSection.identificationModule,protocolSection.statusModule.startDateStruct,protocolSection.designModule,"
           "protocolSection.armsInterventionsModule,protocolSection.conditionsModule,"
           "protocolSection.eligibilityModule.healthyVolunteers,derivedSection.conditionBrowseModule")
@@ -145,8 +145,13 @@ class TrialAtlas:
     def __init__(self, atlas: dict):
         self.first_year: Dict[str, Dict[str, int]] = atlas.get("first_year") or {}
         self.names: Dict[str, str] = atlas.get("names") or {}
+        self.first_nct: Dict[str, Dict[str, str]] = atlas.get("first_nct") or {}
         self.meta = {k: atlas.get(k) for k in ("schema", "built_at", "n_trials")}
         self._cache: Dict[int, Dict[str, Set[str]]] = {}
+
+    def source(self, code: str, chembl_id: str) -> Tuple[Optional[int], str]:
+        """(ilk yıl, o yılın NCT kimliği) — kanıt zinciri için; atlas şema 1 ise NCT boş."""
+        return self.first_year.get(code, {}).get(chembl_id), self.first_nct.get(code, {}).get(chembl_id, "")
 
     def tried_before(self, cutoff: int) -> Dict[str, Set[str]]:
         """{MeSH: kesit yılı dahil o yıla kadar denenmiş ilaçlar}; yalnız MIN_DRUGS ve üstü."""

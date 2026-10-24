@@ -35,6 +35,7 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
     excluded = {canonical.get(d["chembl_id"], d["chembl_id"]) for d in eligible
                 if drugspace.classify(d, d.get("name", "")) == drugspace.KIND_DIAGNOSTIC}
     first: Dict[str, Dict[str, int]] = {}
+    first_nct: Dict[str, Dict[str, str]] = {}
     names: Dict[str, str] = {}
     stats = {"total": 0, "used": 0, "no_year": 0, "not_treatment": 0, "too_many_conditions": 0, "no_mesh": 0,
              "no_drug": 0}
@@ -71,8 +72,9 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
             for cid in hits:
                 if y < row.get(cid, 9999):
                     row[cid] = y
+                    first_nct.setdefault(code, {})[cid] = t.get("nct") or ""
     atlas = {"schema": SCHEMA, "built_at": datetime.datetime.now().isoformat(timespec="seconds"),
-             "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first}
+             "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first, "first_nct": first_nct}
     out = out or atlas_path()
     with gzip.open(out, "wt", encoding="utf-8") as fh:
         json.dump(atlas, fh, ensure_ascii=False)
