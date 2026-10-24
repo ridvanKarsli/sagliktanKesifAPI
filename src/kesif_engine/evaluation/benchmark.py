@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 
 from kesif_engine.evaluation import audit as label_audit
+from kesif_engine.evaluation import calibration
 from kesif_engine.evaluation.backtest import average_precision, backtest
 from kesif_engine.scoring import fusion
 
@@ -184,6 +185,9 @@ def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, 
     if hold and decision["method"] != "base":
         decision["hold_out"] = _evaluate_hold_out(decision, [g for g in groups if g["disease"] in hold])
     final_check = final_confirmation(decision, final_groups, n_boot) if final_set else None
+    calib = _calibrate(decision, groups, models, inputs, n_boot)
+    if calib:
+        decision["calibration"] = calib
 
     diseases_out: Dict[str, dict] = {}
     for d in sorted({g["disease"] for g in groups}):
@@ -214,6 +218,7 @@ def run(inputs: Dict[str, dict], hold_out: Iterable[str] = (), cutoffs=CUTOFFS, 
         "final_diseases": sorted(final_set),
         "final_check": final_check,
         "gate_1": gate_1(rows, decision, inputs, fit_diseases, n_boot, final_check if final_set else None),
+        "calibration": (calib or {}).get("evaluation"),
         "diseases": diseases_out,
     }
 
@@ -405,6 +410,30 @@ def _decide(scorecard: dict, methods: List[str], rows: List[dict], fit_diseases:
     channels = fixed[m] if m in fixed else sorted({c for g in fit_groups for c in g["channels"]},
                                                  key=list(fusion.CHANNELS).index)
     return {**out, "method": "rrf", "channels": channels}
+
+
+def _calibrate(decision: dict, groups: List[dict], models: Dict[str, Dict[str, Any]], inputs: Dict[str, dict],
+               n_boot: int) -> Optional[dict]:
+    """Seçilen yöntemin sırasından '5 yılda klinik çalışmaya girme' olasılığı (evaluation/calibration.py). Model puanları
+    hastalık dışarıda bırakılarak, eşleme de hastalık dışarıda bırakılarak ölçülür; kayda tüm gruplarla kurulan eşleme
+    girer. Kesin doğrulama hastalıkları kullanılmaz."""
+    m = decision.get("measured_as")
+    if not m or m == "base" or (m in models and not models[m]):
+        return None
+
+    def score(g: dict):
+        model = (models.get(m) or {}).get(g["disease"])
+        if m in models and model is None:
+            return None
+        return _score(m, g["features"], model)
+
+    first_years = {d: ((inp.get("labels") or {}).get("first_trial_year") or {}) for d, inp in inputs.items()}
+    cgroups = calibration.build_groups(groups, score, first_years)
+    if len({g["disease"] for g in cgroups}) < MIN_DISEASES:
+        return None
+    evaluation = calibration.evaluate(cgroups, n_boot)
+    table = calibration.fit(pd.concat([g["rows"] for g in cgroups], ignore_index=True))
+    return {**table, "evaluation": evaluation}
 
 
 def _evaluate_hold_out(decision: dict, groups: List[dict]) -> dict:

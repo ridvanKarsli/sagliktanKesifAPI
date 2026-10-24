@@ -162,6 +162,7 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
             "genetic_target": r.get("genetic_target") if isinstance(r.get("genetic_target"), str) else "",
             "network_target": r.get("network_target") if isinstance(r.get("network_target"), str) else "",
             "similar_from": r.get("similar_from") if isinstance(r.get("similar_from"), str) else "",
+            "p_trial_5y": None if _nan(r.get("p_trial_5y")) else float(r["p_trial_5y"]),
             "justification": justify(r.to_dict(), links, disease_cfg.get("label", "hastalık")),
         })
 

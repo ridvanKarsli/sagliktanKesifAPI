@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import pandas as pd
 
 from kesif_engine.catalog import diseases
@@ -173,7 +174,8 @@ def step_rank(disease: str, params: Optional[Params] = None, corpus: Optional[Co
     feats = feature_table.build(ranked, corpus.a, corpus.c_records, corpus.drugs, corpus.drug_map, corpus.external)
     ranked = fusion.apply_to_candidates(ranked, feats, decision, corpus.drug_map, bool(corpus.drugs))
     ranked = feature_table.annotate_external(ranked, corpus.drugs, corpus.drug_map, corpus.external)
-    log.info("Birleştirme: %s (%s)", decision.get("method"), decision.get("origin"))
+    ranked = _add_probability(ranked, decision, corpus)
+    log.info("Birleştirme: %s (%s)", decision.get("measured_as") or decision.get("method"), decision.get("origin"))
     out = resultsdir(disease)
     ranked.to_csv(out / "candidates.csv", encoding="utf-8")
     (out / "evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -193,6 +195,29 @@ def step_rank(disease: str, params: Optional[Params] = None, corpus: Optional[Co
           fusion={k: decision.get(k) for k in ("method", "channels", "verdict", "origin", "reason")})
     log.info("%d aday yazıldı: %s", len(ranked), out / "candidates.csv")
     return ranked
+
+
+def _add_probability(ranked: pd.DataFrame, decision: dict, corpus: Corpus) -> pd.DataFrame:
+    """p_trial_5y: hastalıkta henüz klinik çalışmaya girmemiş ilaç/takviye adaylarına, aralarındaki sıraya göre kalibre
+    olasılık (evaluation/calibration.py; benchmark kararıyla birlikte ölçülür). Diğer satırlar boş kalır."""
+    from kesif_engine.evaluation import calibration
+
+    out = ranked.copy()
+    cal = decision.get("calibration")
+    out["p_trial_5y"] = np.nan
+    if not cal or not len(out):
+        return out
+    tried = set(((corpus.labels or {}).get("first_trial_year") or {}).keys())
+    keys = [corpus.drug_map.get(c, c) for c in out["chemical_id"]] if corpus.drugs else list(out["chemical_id"])
+    order = np.argsort(-out["score"].astype(float).to_numpy(), kind="mergesort")
+    eligible = [int(i) for i in order if out["kind"].iat[i] in ("ilaç", "besin/takviye")
+                and out["status"].iat[i] != "tedavi olarak çalışılmış" and keys[i] not in tried]
+    if eligible:
+        p = calibration.probability(cal, np.arange(1, len(eligible) + 1))
+        col = out.columns.get_loc("p_trial_5y")
+        for pos, val in zip(eligible, p):
+            out.iat[pos, col] = round(float(val), 4)
+    return out
 
 
 def step_backtest(disease: str, cutoff: int = 2018, params: Optional[Params] = None, corpus: Optional[Corpus] = None) -> dict:

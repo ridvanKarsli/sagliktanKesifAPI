@@ -238,6 +238,13 @@ def benchmark(diseases: Optional[List[str]] = typer.Option(None, "--disease", "-
             else:
                 typer.echo(f"  {'✓' if fc['ok'] else '✗'} kesin doğrulama ({', '.join(fc['diseases'])}): sıklığa göre fark "
                            f"{fc['mean']:+.4f} [{fc['lo']:+.4f}, {fc['hi']:+.4f}]")
+    cal = result.get("calibration")
+    if cal and cal.get("brier") is not None:
+        typer.echo(f"\nKalibrasyon ({cal['horizon_years']} yılda klinik çalışmaya girme olasılığı, {cal['n_groups']} grup):")
+        typer.echo(f"  {'✓' if cal['ok'] else '✗'} Brier {cal['brier']} (sabit oran {cal['brier_base']}); beceri {cal['skill']:+.3f} "
+                   f"[{cal['skill_ci'][0]:+.3f}, {cal['skill_ci'][1]:+.3f}]; log kaybı {cal['logloss']} / {cal['logloss_base']}")
+        for r in cal.get("by_rank", []):
+            typer.echo(f"    sıra {r['ranks']:<16} tahmin %{100 * r['predicted']:.1f}  gerçekleşen %{100 * r['observed']:.1f}  (n={r['n']})")
     if rerank and result.get("applied"):
         for key in ready:
             with c.uow() as uow:
