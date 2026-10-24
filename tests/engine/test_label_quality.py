@@ -235,3 +235,15 @@ def test_schema6_excludes_perioperative_use():
     assert labels.exclusion_reason({"title": "Dexmedetomidine Added to Adductor Canal Block After Total Knee Arthroplasty"}) == "procedural"
     assert labels.exclusion_reason({"title": "Gabapentin for Postoperative Pain After Hip Replacement"}) == "procedural"
     assert labels.exclusion_reason({"title": "Ustekinumab to Prevent Postoperative Recurrence of Crohn's Disease"}) == ""
+
+
+def test_schema6_refinements_pharmacovigilance_induced_and_target_aware_comorbidity():
+    pv = {"title": "Pharmacovigilance in elderly psychiatric inpatients", "interventions": [("DRUG", "Haloperidol")]}
+    assert labels.exclusion_reason(pv, ["schizophrenia"]) == "observational"
+    wg = {"title": "Metformin for antipsychotic-induced weight gain", "interventions": [("DRUG", "Metformin")]}
+    assert labels.exclusion_reason(wg, ["schizophrenia"]) == "comorbidity"
+    reg = {"title": "A Registry-Based Randomized Trial of Pimozide in ALS", "interventions": [("DRUG", "Pimozide")]}
+    assert labels.exclusion_reason(reg, ["amyotrophic lateral sclerosis"]) == ""
+    bone = {"title": "Denosumab and bone mineral density in postmenopausal osteoporosis", "interventions": [("DRUG", "Denosumab")]}
+    assert labels.exclusion_reason(bone, ["osteoporosis", "osteoporotic"]) == ""
+    assert labels.exclusion_reason(bone, ["rheumatoid arthritis"]) == "comorbidity"

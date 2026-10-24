@@ -122,6 +122,13 @@ COMORBID = re.compile(
     r"|bone health|skeletal|ototoxicity|meibomian|overactive bladder", re.I)
 OTHER_DISEASE = re.compile(r"cancer|carcinoma|tumou?r|lymphoma|leuka?emia|melanoma|sarcoma|neoplasm|myeloma", re.I)
 BLOOD_PRESSURE = re.compile(r"blood pressure|hypertensi", re.I)
+# Gözlemsel/güvenlik izleme çalışmaları "girişimsel" kayıtlı olabiliyor (şizofrenide onlarca antipsikotiği listeleyen tek
+# bir farmakovijilans çalışması 72 yanlış etiket üretti); ilaca bağlı yan etkiyi hedefleyen çalışmalar da hastalığın
+# tedavisi değildir. Elle denetlenmiş 3.201 etikette bu iki kural 75 yanlışı yakalıyor, hiçbir doğruyu düşürmüyor.
+PHARMACOVIGILANCE = re.compile(r"pharmacovigilance|drug safety monitoring|adverse drug reactions?|drug utili[sz]ation"
+                               r"|prescri(bing|ption) patterns?|post-?marketing surveillance|safety surveillance", re.I)
+DRUG_INDUCED = re.compile(r"\b(drug|medication|antipsychotic|neuroleptic|steroid|glucocorticoid|corticosteroid|chemotherapy|opioid"
+                          r"|lithium|olanzapine|clozapine|risperidone|statin)s?[- ](induced|associated|related)\b", re.I)
 DISCONTINUE = re.compile(r"\bdiscontinu|withdrawal of|\btaper(ing)?\b|de-?escalat|dose reduction|\bstopping\b", re.I)
 TERMS_FILE = Path(__file__).resolve().parents[1] / "resources" / "disease_terms.json"
 
@@ -187,7 +194,12 @@ def exclusion_reason(trial: dict, terms: Sequence[str] = ()) -> str:
         return "pk"
     if PROCEDURAL.search(title):
         return "procedural"
-    if COMORBID.search(title):
+    if PHARMACOVIGILANCE.search(title):
+        return "observational"
+    if DRUG_INDUCED.search(title):
+        return "comorbidity"
+    # eşlik eden durum sözlüğü hedefin kendisini adlandırıyorsa (osteoporoz hedefinde "osteopor", "bone loss") dışlanmaz
+    if COMORBID.search(title) and not (target and COMORBID.search(target)):
         return "comorbidity"
     if target and BLOOD_PRESSURE.search(title) and not BLOOD_PRESSURE.search(target):
         return "comorbidity"
