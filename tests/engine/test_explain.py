@@ -32,5 +32,7 @@ def test_chain_has_contributions_literature_and_neighbor_steps():
     assert "IL23R" in lit["metin"] and "baskılıyor" in lit["metin"] and {"tip": "pmid", "id": "111"} in lit["kaynaklar"]
     # popüler ama başka kanıtı olmayan aday: katkı yalnız popülerlikten
     assert [k["kanal"] for k in chains["M2"]["katkilar"]] == ["frequency"]
+    weak = explain._independent_steps({"genetic_target": "", "network_target": "JAK1 z=0.5"})
+    assert weak == [] and explain._independent_steps({"network_target": "JAK1 z=3.2"})[0]["tur"] == "protein ağı"
     col = explain.to_column(chains, ["M1", "X"])
     assert json.loads(col[0])["adimlar"] and col[1] == ""

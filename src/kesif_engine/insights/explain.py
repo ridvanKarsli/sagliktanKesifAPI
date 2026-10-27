@@ -34,6 +34,7 @@ DIRECTION = {"consistent": "yön tutarlı", "inconsistent": "yön tutarsız (dik
 EFFECT = {"inhibit": "baskılıyor", "activate": "artırıyor"}
 TOP_LINKS = 2
 TOP_NEIGHBORS = 3
+MIN_NETWORK_Z = 2.0  # zincirde gösterilecek en küçük ağ yakınlığı (z < 2 anlamlı yakınlık sayılmaz)
 
 
 def contributions(model: dict, features: pd.DataFrame) -> pd.DataFrame:
@@ -109,6 +110,13 @@ def _neighbor_step(name: str, key: str, external: dict, year: int) -> Optional[d
             "kaynaklar": [{"tip": "nct", "id": nct} for _, _, nct in hits if nct]}
 
 
+def _z(text: str) -> float:
+    try:
+        return float(text.rsplit("z=", 1)[1])
+    except (IndexError, ValueError):
+        return 0.0
+
+
 def _independent_steps(row: dict) -> List[dict]:
     steps = []
     gt, nt = row.get("genetic_target"), row.get("network_target")
@@ -116,7 +124,7 @@ def _independent_steps(row: dict) -> List[dict]:
         sym, val = gt.rsplit(" ", 1)
         steps.append({"tur": "genetik", "metin": f"Hedef gen {sym} hastalıkla genetik olarak ilişkili (Open Targets skoru {val}).",
                       "kaynaklar": []})
-    if isinstance(nt, str) and nt:
+    if isinstance(nt, str) and nt and _z(nt) >= MIN_NETWORK_Z:
         sym, val = nt.rsplit(" ", 1)
         steps.append({"tur": "protein ağı", "metin": f"Hedef {sym}, protein ağında hastalık genlerine rastgele beklenenden yakın ({val}).",
                       "kaynaklar": []})
