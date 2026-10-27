@@ -236,6 +236,10 @@ def track(ledger_id: str, trials: Iterable[dict], drugs: list, min_phase: float)
     body = json.loads((ledger_root() / ledger_id / "entries.json").read_text(encoding="utf-8"))
     frozen = body["frozen_at_utc"][:10]
     trials = list(trials)
+    dated = sum(1 for t in trials if t.get("first_submitted"))
+    if not trials or dated < 0.5 * len(trials):
+        raise RuntimeError(f"Ham çalışma dosyası kullanılamaz: {len(trials)} çalışma, {dated} tanesinde kayıt tarihi var. "
+                           "ClinicalTrials.gov kayıtlarını yeniden indirin (kesif ledger track --download).")
     after = [t for t in trials if (t.get("first_submitted") or "") > frozen]
     before = [t for t in trials if t.get("first_submitted") and t["first_submitted"] <= frozen]
     rows = []

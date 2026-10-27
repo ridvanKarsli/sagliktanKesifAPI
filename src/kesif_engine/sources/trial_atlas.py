@@ -100,12 +100,16 @@ def download(client: Optional[HttpClient] = None, progress: Optional[Callable[[s
     if state.get("done"):
         say(f"Ham çalışmalar zaten indirilmiş ({state.get('n', 0)} çalışma); yeniden indirmek için restart=True.")
         return state
+    part = out.with_name(out.name + ".part")  # indirme bitene kadar ayrı dosyaya yazılır, sonunda tek adımda yerine konur
     if not state:
-        out.unlink(missing_ok=True)
+        part.unlink(missing_ok=True)
         state = {"token": None, "n": 0, "pages": 0, "filter": None, "started": datetime.datetime.now().isoformat(timespec="seconds")}
     import requests
 
-    with (gzip.open(out, "at", encoding="utf-8") if state["n"] else gzip.open(out, "wt", encoding="utf-8")) as fh:
+    mode = "at" if state["n"] and part.exists() else "wt"
+    if mode == "wt":
+        state.update({"token": None, "n": 0, "pages": 0})
+    with gzip.open(part, mode, encoding="utf-8") as fh:
         while True:
             params = {"pageSize": PAGE_SIZE, "format": "json", "fields": FIELDS}
             if state["token"]:
@@ -139,6 +143,10 @@ def download(client: Optional[HttpClient] = None, progress: Optional[Callable[[s
                 say(f"  {state['n']:,} çalışma indirildi ({state['pages']} sayfa)")
             if not state["token"]:
                 break
+    n_written = sum(1 for _ in iter_raw(part))
+    if n_written != state["n"]:
+        raise RuntimeError(f"Ham dosya eksik yazıldı: {n_written} satır, beklenen {state['n']}. İndirme yeniden başlatılmalı.")
+    part.replace(out)
     state["done"] = True
     state["finished"] = datetime.datetime.now().isoformat(timespec="seconds")
     state_path.write_text(json.dumps(state))

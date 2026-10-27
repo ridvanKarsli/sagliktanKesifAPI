@@ -73,6 +73,8 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
                 if y < row.get(cid, 9999):
                     row[cid] = y
                     first_nct.setdefault(code, {})[cid] = t.get("nct") or ""
+    if stats["total"] == 0 or stats["used"] == 0:
+        raise RuntimeError("Ham çalışma dosyası boş ya da kullanılamaz; atlas değiştirilmedi. Önce yeniden indirin (kesif atlas --restart).")
     atlas = {"schema": SCHEMA, "built_at": datetime.datetime.now().isoformat(timespec="seconds"),
              "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first, "first_nct": first_nct}
     out = out or atlas_path()
