@@ -81,3 +81,33 @@ def test_canonical_bytes_stable():
     a = ledger.canonical_bytes({"b": 1, "a": "ç"})
     b = ledger.canonical_bytes({"a": "ç", "b": 1})
     assert a == b == '{"a":"ç","b":1}'.encode()
+
+
+def test_track_counts_only_trials_registered_after_freeze(workspace):
+    m = ledger.freeze(["dz"], top=2, ledger_id="t2")
+    frozen = m["frozen_at_utc"][:10]
+
+    def trial(nct, drug, submitted, year):
+        return {"nct": nct, "title": "Efficacy in Dz", "start_year": year, "study_type": "INTERVENTIONAL", "purpose": "TREATMENT",
+                "phases": ["PHASE2"], "interventions": [("DRUG", drug)], "experimental": [drug],
+                "arms": [{"type": "EXPERIMENTAL", "names": [drug]}], "conditions": ["Dz"], "condition_mesh": ["D1"],
+                "healthy_volunteers": False, "first_submitted": submitted}
+
+    drugs = [{"chembl_id": c, "name": n.upper(), "max_phase": 4.0, "synonyms": [], "mechanisms": [], "parent": c}
+             for c, n in (("C4", "novel one"), ("C5", "mentioned"), ("C6", "supplement"))]
+    trials = [trial("N1", "novel one", "2099-01-01", 2099),      # dondurmadan sonra: isabet
+              trial("N2", "mentioned", "2000-01-01", 2000),      # dondurmadan önce: zaten denenmiş, ölçümden çıkar
+              trial("N3", "supplement", "2099-02-01", 2099)]     # evrende ama defterde değil
+    r = ledger.track("t2", trials, drugs, 1.0)
+    d = r["diseases"][0]
+    assert [h["chembl_id"] for h in d["hits"]] == ["C4"] and d["already_trialed_before_freeze"] == ["C5"]
+    assert r["n"] == 1 and r["excluded_already_trialed"] == 1 and frozen < "2099"
+    assert 0 < r["p_value"] <= 1
+
+
+def test_blind_panel_mixes_ledger_and_controls(workspace, monkeypatch):
+    ledger.freeze(["dz"], top=1, ledger_id="t3")
+    monkeypatch.setattr(ledger, "_drug_names", lambda: {"C5": "mentioned", "C6": "supplement"})
+    form, key = ledger.blind_panel("t3", per_disease=2)
+    assert len(form) == 2 and {k["kaynak"] for k in key} == {"defter", "kontrol"}
+    assert all("kaynak" not in f for f in form) and [f["kod"] for f in form] == [k["kod"] for k in key]

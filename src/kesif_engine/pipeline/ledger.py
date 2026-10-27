@@ -27,6 +27,7 @@ import hashlib
 import importlib
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -214,3 +215,95 @@ def evaluate(ledger_id: str, atlas: Optional[trial_atlas.TrialAtlas] = None) -> 
     return {"ledger_id": ledger_id, "counted_after_year": year0, "atlas": atlas.meta, "diseases": rows,
             "hits": int(tot_hits), "n": int(tot_n), "expected_random": round(tot_exp, 3),
             "enrichment": round(tot_hits / tot_exp, 2) if tot_exp else None}
+
+
+def _binom_tail(k: int, n: int, p: float) -> float:
+    """P(X ≥ k), X ~ Binom(n, p): rastgele seçilmiş n adaydan en az k'sının doğrulanma olasılığı."""
+    if k <= 0:
+        return 1.0
+    if p <= 0:
+        return 0.0
+    return float(min(1.0, sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k, n + 1))))
+
+
+def track(ledger_id: str, trials: Iterable[dict], drugs: list, min_phase: float) -> dict:
+    """Gün çözünürlüklü takip: defter dondurulduktan SONRA ClinicalTrials.gov'a kaydedilen çalışmalardan, etiketlerle
+    aynı kurallarla (labels.map_trials_to_drugs: hastalığa ait, tedavi amaçlı, test edilen ilaç…) hangi defter adayları
+    hastalıkta klinik çalışmaya girdi? Rastgele beklenti: aynı hastalığın aday evreninin aynı dönemdeki oranı.
+
+    Dondurmadan ÖNCE de aynı hastalıkta çalışması bulunan adaylar (etiket eksikliği yüzünden defterde "yeni" görünenler)
+    hem isabetten hem evrenden çıkarılır ve ayrıca raporlanır: ölçüm yalnız gerçekten yeni olanlarla yapılır."""
+    body = json.loads((ledger_root() / ledger_id / "entries.json").read_text(encoding="utf-8"))
+    frozen = body["frozen_at_utc"][:10]
+    trials = list(trials)
+    after = [t for t in trials if (t.get("first_submitted") or "") > frozen]
+    before = [t for t in trials if t.get("first_submitted") and t["first_submitted"] <= frozen]
+    rows = []
+    tot = {"hits": 0, "n": 0, "expected": 0.0, "already": 0}
+    for key, d in sorted(body["diseases"].items()):
+        mesh_id, name = d.get("mesh_id", ""), d.get("name_en", "")
+        code = _code(mesh_id)
+
+        def about(ts: List[dict], code: str = code) -> List[dict]:  # hız için önce MeSH koduyla süz (kurallar da kodu ister)
+            return [t for t in ts if code in {str(m).upper() for m in (t.get("condition_mesh") or [])}]
+
+        a, b = about(after), about(before)
+        new = labels_mod.map_trials_to_drugs(a, drugs, min_phase, mesh_id=mesh_id, name_en=name) if a else {}
+        old = labels_mod.map_trials_to_drugs(b, drugs, min_phase, mesh_id=mesh_id, name_en=name) if b else {}
+        already = {e["chembl_id"] for e in d["entries"] if e["chembl_id"] in old}
+        uni = [c for c in d.get("universe") or [] if c not in old]
+        entries = [e for e in d["entries"] if e["chembl_id"] not in already]
+        rate = (sum(1 for c in uni if c in new) / len(uni)) if uni else 0.0
+        hits = [{"chembl_id": e["chembl_id"], "name": e["name"], "position": e["position"]} for e in entries if e["chembl_id"] in new]
+        rows.append({"disease": key, "n": len(entries), "hits": hits, "expected_random": round(rate * len(entries), 3),
+                     "already_trialed_before_freeze": sorted(already)})
+        tot["hits"] += len(hits)
+        tot["n"] += len(entries)
+        tot["expected"] += rate * len(entries)
+        tot["already"] += len(already)
+    p0 = tot["expected"] / tot["n"] if tot["n"] else 0.0
+    return {"ledger_id": ledger_id, "frozen": frozen, "checked_at": datetime.date.today().isoformat(),
+            "n_trials_after_freeze": len(after), "hits": tot["hits"], "n": tot["n"],
+            "expected_random": round(tot["expected"], 3),
+            "enrichment": round(tot["hits"] / tot["expected"], 2) if tot["expected"] else None,
+            "p_value": round(_binom_tail(tot["hits"], tot["n"], p0), 6),
+            "excluded_already_trialed": tot["already"], "diseases": rows}
+
+
+def _drug_names() -> Dict[str, str]:
+    from kesif_engine.sources import chembl
+
+    return {d["chembl_id"]: (d.get("name") or "").lower() for d in chembl.load()}
+
+
+def blind_panel(ledger_id: str, diseases_: Optional[Iterable[str]] = None, per_disease: int = 10, seed: int = 20261027) -> tuple:
+    """Uzman paneli için kör değerlendirme formu (Faz 4). Her hastalıktan yarısı defter adayı, yarısı aynı hastalığın aday
+    evreninden rastgele seçilmiş (defterde olmayan) kontrol ilaç; sıra karıştırılır, kaynak ve sıra bilgisi formda yoktur.
+    Dönen: (form satırları, anahtar satırları). Anahtar ayrı saklanır ve puanlama bitince açılır: "makul" oranı defter
+    adaylarında kontrollerden anlamlı yüksekse sistemin sinyali uzman gözünde de vardır."""
+    import random
+
+    body = json.loads((ledger_root() / ledger_id / "entries.json").read_text(encoding="utf-8"))
+    rng = random.Random(seed)
+    form, key = [], []
+    wanted = list(diseases_) if diseases_ else sorted(body["diseases"])
+    half = per_disease // 2
+    for dz in wanted:
+        d = body["diseases"].get(dz)
+        if not d:
+            continue
+        top = d["entries"][:]
+        rng.shuffle(top)
+        picks = [("defter", e["chembl_id"], e["name"]) for e in top[:half]]
+        in_ledger = {e["chembl_id"] for e in d["entries"]}
+        pool = [c for c in d.get("universe") or [] if c not in in_ledger]
+        names = _drug_names()
+        for c in rng.sample(pool, min(per_disease - len(picks), len(pool))):
+            picks.append(("kontrol", c, names.get(c, "")))
+        rng.shuffle(picks)
+        for src, cid, name in picks:
+            item = f"{dz}-{len(form) + 1:04d}"
+            form.append({"kod": item, "hastalik": d.get("label") or dz, "ilac_chembl": cid, "ilac": name,
+                         "degerlendirme (makul / makul değil / zaten biliniyor)": "", "gerekce": ""})
+            key.append({"kod": item, "kaynak": src, "hastalik": dz, "ilac_chembl": cid})
+    return form, key

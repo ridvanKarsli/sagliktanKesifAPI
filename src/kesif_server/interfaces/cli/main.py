@@ -466,6 +466,61 @@ def ledger_evaluate(ledger_id: str):
     typer.echo(json.dumps(r["diseases"], ensure_ascii=False, indent=1))
 
 
+@ledger_app.command("track")
+def ledger_track(ledger_id: str, download: bool = typer.Option(True, help="ClinicalTrials.gov kayıtlarını baştan indir (~10 dk)")):
+    """Gün çözünürlüklü takip: dondurmadan sonra kaydedilen çalışmalarla hangi defter adayları doğrulandı."""
+    import logging
+
+    from kesif_engine.core import config as engine_config
+    from kesif_engine.pipeline import ledger
+    from kesif_engine.sources import chembl, trial_atlas
+
+    from ...container import get_container
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    c = get_container()
+    c.startup()
+    ws = c.workspace_impl
+    ws.prepare()
+    if download:
+        trial_atlas.download(progress=typer.echo, restart=True)
+    r = ledger.track(ledger_id, trial_atlas.iter_raw(), chembl.load(), engine_config.MIN_PHASE)
+    out = ledger.ledger_root() / ledger_id / f"track_{r['checked_at']}.json"
+    out.write_text(json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8")
+    ws.save()
+    typer.echo(f"Defter {ledger_id} (dondurma {r['frozen']}): dondurmadan sonra {r['n_trials_after_freeze']} yeni çalışma kaydı")
+    typer.echo(f"  {r['hits']} / {r['n']} aday hastalıkta klinik çalışmaya girdi; rastgele beklenti {r['expected_random']}"
+               f" (kat {r['enrichment']}, p = {r['p_value']})")
+    typer.echo(f"  dondurmadan önce zaten denenmiş olduğu anlaşılan ve ölçümden çıkarılan aday: {r['excluded_already_trialed']}")
+    for d in r["diseases"]:
+        if d["hits"]:
+            typer.echo(f"  ✓ {d['disease']}: " + ", ".join(f"{h['name']} (#{h['position']})" for h in d["hits"]))
+
+
+@ledger_app.command("panel")
+def ledger_panel(ledger_id: str, out_dir: Path = typer.Argument(..., help="Formun yazılacağı klasör"),
+                 disease: Optional[List[str]] = typer.Option(None, "--disease", "-d", help="Yalnızca bu hastalıklar"),
+                 per_disease: int = typer.Option(10, help="Hastalık başına satır (yarısı defter, yarısı kontrol)")):
+    """Uzman paneli için kör form (panel_formu.csv) ve ayrı anahtar (panel_anahtari.csv; puanlama bitene kadar açmayın)."""
+    import csv
+
+    from kesif_engine.pipeline import ledger
+
+    from ...container import get_container
+
+    c = get_container()
+    c.startup()
+    c.workspace_impl.prepare()
+    form, key = ledger.blind_panel(ledger_id, disease, per_disease)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for name, rows in (("panel_formu.csv", form), ("panel_anahtari.csv", key)):
+        with open(out_dir / name, "w", encoding="utf-8-sig", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()), delimiter=";")
+            w.writeheader()
+            w.writerows(rows)
+    typer.echo(f"{len(form)} satır: {out_dir / 'panel_formu.csv'} (anahtar ayrı: panel_anahtari.csv)")
+
+
 @app.command("label-audit")
 def label_audit(disease: str, n: int = typer.Option(50, help="Örnek satır sayısı"),
                 out: Optional[Path] = typer.Option(None, "--out", help="Örneğin yazılacağı CSV (varsayılan: <hastalık>_etiket_denetimi.csv)"),
