@@ -488,7 +488,8 @@ def ledger_track(ledger_id: str, download: bool = typer.Option(True, help="Clini
     out = ledger.ledger_root() / ledger_id / f"track_{r['checked_at']}.json"
     out.write_text(json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8")
     ws.save()
-    typer.echo(f"Defter {ledger_id} (dondurma {r['frozen']}): dondurmadan sonra {r['n_trials_after_freeze']} yeni çalışma kaydı")
+    typer.echo(f"Defter {ledger_id} (dondurma {r['frozen']}): dondurmadan sonra yayımlanan {r['n_trials_after_freeze']} yeni çalışma"
+               f" (indirilen verideki en yeni yayım tarihi {r['latest_posted']})")
     typer.echo(f"  {r['hits']} / {r['n']} aday hastalıkta klinik çalışmaya girdi; rastgele beklenti {r['expected_random']}"
                f" (kat {r['enrichment']}, p = {r['p_value']})")
     typer.echo(f"  dondurmadan önce zaten denenmiş olduğu anlaşılan ve ölçümden çıkarılan aday: {r['excluded_already_trialed']}")

@@ -34,7 +34,8 @@ log = logging.getLogger(__name__)
 
 SCHEMA = 2  # 2: her ilk yıl için o yılı belirleyen çalışmanın NCT kimliği (first_nct; kanıt zinciri için)
 FIELDS = ("protocolSection.identificationModule,protocolSection.statusModule.startDateStruct,"
-          "protocolSection.statusModule.studyFirstSubmitDate,protocolSection.designModule,"
+          "protocolSection.statusModule.studyFirstSubmitDate,protocolSection.statusModule.studyFirstPostDateStruct,"
+          "protocolSection.designModule,"
           "protocolSection.armsInterventionsModule,protocolSection.conditionsModule,"
           "protocolSection.eligibilityModule.healthyVolunteers,derivedSection.conditionBrowseModule")
 # Yalnız ilaç türü müdahale içeren girişimsel çalışmalar. API filtreyi reddederse (HTTP 400) sıradakine düşülür;
@@ -63,19 +64,22 @@ def atlas_path() -> Path:
 def _compact(t: dict) -> dict:
     """Atlas için gereken alanlar (ham dosyayı küçük tutmak için)."""
     keep = ("nct", "title", "start_year", "study_type", "purpose", "phases", "interventions", "experimental", "arms",
-            "conditions", "condition_mesh", "condition_mesh_direct", "healthy_volunteers", "first_submitted", "start_date")
+            "conditions", "condition_mesh", "condition_mesh_direct", "healthy_volunteers", "first_submitted", "first_posted", "start_date")
     return {k: t.get(k) for k in keep}
 
 
-def _dates(payload: dict) -> Dict[str, Tuple[str, str]]:
-    """nct → (kayda ilk gönderilme tarihi, başlangıç tarihi). Tahmin defteri takibi gün çözünürlüğünde yapılır: bir
-    çalışma ancak defter dondurulduktan SONRA kaydedildiyse doğrulama sayılır."""
+def _dates(payload: dict) -> Dict[str, Tuple[str, str, str]]:
+    """nct → (kayda ilk gönderilme, ilk yayımlanma, başlangıç tarihi). Tahmin defteri takibi gün çözünürlüğünde ve İLK
+    YAYIMLANMA tarihine göre yapılır: gönderilen kayıt ClinicalTrials.gov'da ancak denetimden sonra (günler–haftalar)
+    görünür; dondurma anında kamuya açık olmayan bir çalışma, gönderim tarihi önce olsa bile tahminin bilemeyeceği
+    bilgidir."""
     out = {}
     for st in payload.get("studies", []):
         ps = st.get("protocolSection") or {}
         sm = ps.get("statusModule") or {}
         nct = (ps.get("identificationModule") or {}).get("nctId", "")
-        out[nct] = (str(sm.get("studyFirstSubmitDate") or ""), str((sm.get("startDateStruct") or {}).get("date") or ""))
+        out[nct] = (str(sm.get("studyFirstSubmitDate") or ""), str((sm.get("studyFirstPostDateStruct") or {}).get("date") or ""),
+                    str((sm.get("startDateStruct") or {}).get("date") or ""))
     return out
 
 
@@ -132,7 +136,7 @@ def download(client: Optional[HttpClient] = None, progress: Optional[Callable[[s
             dates = _dates(data)
             for t in parse_trials(data):
                 t["condition_mesh_direct"] = direct.get(t["nct"], [])
-                t["first_submitted"], t["start_date"] = dates.get(t["nct"], ("", ""))
+                t["first_submitted"], t["first_posted"], t["start_date"] = dates.get(t["nct"], ("", "", ""))
                 fh.write(json.dumps(_compact(t), ensure_ascii=False) + "\n")
                 state["n"] += 1
             state["pages"] += 1

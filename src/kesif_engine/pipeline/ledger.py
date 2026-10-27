@@ -227,7 +227,7 @@ def _binom_tail(k: int, n: int, p: float) -> float:
 
 
 def track(ledger_id: str, trials: Iterable[dict], drugs: list, min_phase: float) -> dict:
-    """Gün çözünürlüklü takip: defter dondurulduktan SONRA ClinicalTrials.gov'a kaydedilen çalışmalardan, etiketlerle
+    """Gün çözünürlüklü takip: defter dondurulduktan SONRA ClinicalTrials.gov'da ilk kez yayımlanan çalışmalardan, etiketlerle
     aynı kurallarla (labels.map_trials_to_drugs: hastalığa ait, tedavi amaçlı, test edilen ilaç…) hangi defter adayları
     hastalıkta klinik çalışmaya girdi? Rastgele beklenti: aynı hastalığın aday evreninin aynı dönemdeki oranı.
 
@@ -236,12 +236,15 @@ def track(ledger_id: str, trials: Iterable[dict], drugs: list, min_phase: float)
     body = json.loads((ledger_root() / ledger_id / "entries.json").read_text(encoding="utf-8"))
     frozen = body["frozen_at_utc"][:10]
     trials = list(trials)
-    dated = sum(1 for t in trials if t.get("first_submitted"))
+    def when(t: dict) -> str:  # kamuya ilk yayımlanma; eski ham dosyalarda yoksa gönderim tarihi
+        return t.get("first_posted") or t.get("first_submitted") or ""
+
+    dated = sum(1 for t in trials if when(t))
     if not trials or dated < 0.5 * len(trials):
         raise RuntimeError(f"Ham çalışma dosyası kullanılamaz: {len(trials)} çalışma, {dated} tanesinde kayıt tarihi var. "
                            "ClinicalTrials.gov kayıtlarını yeniden indirin (kesif ledger track --download).")
-    after = [t for t in trials if (t.get("first_submitted") or "") > frozen]
-    before = [t for t in trials if t.get("first_submitted") and t["first_submitted"] <= frozen]
+    after = [t for t in trials if when(t) > frozen]
+    before = [t for t in trials if when(t) and when(t) <= frozen]
     rows = []
     tot = {"hits": 0, "n": 0, "expected": 0.0, "already": 0}
     for key, d in sorted(body["diseases"].items()):
@@ -267,7 +270,7 @@ def track(ledger_id: str, trials: Iterable[dict], drugs: list, min_phase: float)
         tot["already"] += len(already)
     p0 = tot["expected"] / tot["n"] if tot["n"] else 0.0
     return {"ledger_id": ledger_id, "frozen": frozen, "checked_at": datetime.date.today().isoformat(),
-            "n_trials_after_freeze": len(after), "hits": tot["hits"], "n": tot["n"],
+            "n_trials_after_freeze": len(after), "latest_posted": max((when(t) for t in trials), default=""), "hits": tot["hits"], "n": tot["n"],
             "expected_random": round(tot["expected"], 3),
             "enrichment": round(tot["hits"] / tot["expected"], 2) if tot["expected"] else None,
             "p_value": round(_binom_tail(tot["hits"], tot["n"], p0), 6),
