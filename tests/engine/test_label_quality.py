@@ -247,3 +247,26 @@ def test_schema6_refinements_pharmacovigilance_induced_and_target_aware_comorbid
     bone = {"title": "Denosumab and bone mineral density in postmenopausal osteoporosis", "interventions": [("DRUG", "Denosumab")]}
     assert labels.exclusion_reason(bone, ["osteoporosis", "osteoporotic"]) == ""
     assert labels.exclusion_reason(bone, ["rheumatoid arthritis"]) == "comorbidity"
+
+
+def test_recall_refinements_gene_therapy_missing_mesh_and_route_prefix():
+    from kesif_engine.extraction.drugmap import DrugIndex
+
+    drugs = [{"chembl_id": "C_LAR", "name": "LARUPARETIGENE ZOVAPARVOVEC", "max_phase": 2.0, "synonyms": ["AGTC-501"],
+              "mechanisms": [], "parent": "C_LAR"},
+             {"chembl_id": "C_ULT", "name": "ULTEVURSEN", "max_phase": 2.0, "synonyms": [], "mechanisms": [], "parent": "C_ULT"}]
+    xlrp = {"nct": "N1", "title": "AGTC-501 in XLRP", "start_year": 2023, "study_type": "INTERVENTIONAL", "purpose": "TREATMENT",
+            "phases": ["PHASE2"], "interventions": [("GENETIC", "AGTC-501 (high dose)")], "experimental": ["AGTC-501 (high dose)"],
+            "arms": [{"type": "EXPERIMENTAL", "names": ["AGTC-501 (high dose)"]}],
+            "conditions": ["X-Linked Retinitis Pigmentosa"], "condition_mesh": ["D040181"], "healthy_volunteers": False}
+    ult = {**xlrp, "nct": "N2", "title": "Ultevursen in RP", "interventions": [("DRUG", "Intravitreal Injection of Ultevursen")],
+           "experimental": ["Intravitreal Injection of Ultevursen"], "arms": [{"type": "EXPERIMENTAL", "names": ["Intravitreal Injection of Ultevursen"]}]}
+    terms = ["retinitis pigmentosa"]
+    assert labels.trial_is_about(xlrp, "MESH:D012174", terms) and labels.exclusion_reason(xlrp, terms) == ""
+    assert not labels.trial_is_about({**xlrp, "conditions": ["Choroideremia"], "title": "Retinitis pigmentosa-like"}, "MESH:D012174", terms)
+    assert "Ultevursen" in labels.intervention_candidates("Intravitreal Injection of Ultevursen")
+    first = labels.map_trials_to_drugs([xlrp, ult], drugs, 1.0, mesh_id="MESH:D012174", name_en="Retinitis Pigmentosa")
+    assert first == {"C_LAR": 2023, "C_ULT": 2023}
+    # kök hücre / CAR-T bağlamı hâlâ destek sayılır
+    assert labels.exclusion_reason({**xlrp, "interventions": [("BIOLOGICAL", "autologous stem cell transplant")]}, terms) == "support"
+    assert DrugIndex(drugs).match(["AGTC-501"]) == "C_LAR"

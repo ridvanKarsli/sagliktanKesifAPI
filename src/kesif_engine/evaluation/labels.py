@@ -64,6 +64,10 @@ def intervention_candidates(name: str) -> list:
     cleaned = re.split(r"\s*[\(\[/+,;]\s*", cleaned)[0].strip()
     words = cleaned.split()
     cands = [base, cleaned]
+    # uygulama yolu ön ekleri: "Intravitreal Injection of Ultevursen" → "Ultevursen"
+    m = re.search(r"\b(?:injection|infusion|administration|implant(?:ation)?|instillation|application)s? of\s+(.+)$", cleaned, re.I)
+    if m:
+        cands.append(m.group(1).strip())
     if len(words) >= 2:
         cands.append(" ".join(words[:2]))
     if words:
@@ -79,7 +83,7 @@ def intervention_candidates(name: str) -> list:
 
 PLACEBO = re.compile(r"\b(placebo|sham|vehicle|dummy|saline|sugar pill|no (treatment|intervention)|usual care|standard (of )?care)\b", re.I)
 COMPARATOR_ARMS = {"PLACEBO_COMPARATOR", "SHAM_COMPARATOR", "ACTIVE_COMPARATOR", "NO_INTERVENTION"}
-DRUG_TYPES = {"", "DRUG", "BIOLOGICAL", "COMBINATION_PRODUCT", "DIETARY_SUPPLEMENT"}
+DRUG_TYPES = {"", "DRUG", "BIOLOGICAL", "COMBINATION_PRODUCT", "DIETARY_SUPPLEMENT", "GENETIC"}
 MAX_CONDITIONS = 5     # daha fazla hastalık listeleyen çalışmalar şemsiye/genel çalışmadır (ör. "kronik ağrı, astım, ...")
 LATE_PHASES = {"PHASE2", "PHASE3", "PHASE4"}
 
@@ -97,8 +101,11 @@ PROCEDURAL = re.compile(
     r"|infusion[- ](associated|related) reactions?|infusion reactions?|stellate ganglion|for imaging|nerve block|\bECMO\b|extracorporeal"
     r"|arthroplasty|(knee|hip|joint) replacement|post-?operative (pain|nausea|analgesia|cognitive|delirium|opioid)"
     r"|peri-?operative|after (total )?(knee|hip) (surgery|replacement)|microfracture", re.I)
+# Gen tedavisi (AAV vb.) artık destek bağlamı sayılmaz: test edilen ürün ilaç sözlüğünde varsa (voretigen, laruparetigen)
+# hastalıkta klinik çalışmaya girmiş demektir; yoksa zaten eşlenmez. Önceden bu çalışmalar bütünüyle dışlandığı için gen
+# tedavileri tahmin defterinde "hiç denenmemiş" görünüyordu (retinitis pigmentosa).
 SUPPORT_CONTEXT = re.compile(
-    r"transplant|stem[- ]cell|\bHSCT\b|\bCAR[- ]?T\b|chimeric antigen|gene therapy|\bAAV\d*\b|lymphodeplet|conditioning regimen"
+    r"transplant|stem[- ]cell|\bHSCT\b|\bCAR[- ]?T\b|chimeric antigen|lymphodeplet|conditioning regimen"
     r"|\b(NK|T)[- ]cells?\b|cell therapy|\bcells\b", re.I)
 # Müdahale adının kısaltılmış biçimleri ('GLP-1 analog' → 'GLP-1', 'Aldosterone antagonists' → 'Aldosterone') ancak
 # atılan kısım doz/form bilgisiyse kullanılır; atılan kısım ilacın sınıfını ya da başka bir maddeyi tarif ediyorsa
@@ -171,11 +178,15 @@ def names_disease(text: str, terms: list, exclude: Sequence[str] = ()) -> bool:
 
 def trial_is_about(trial: dict, mesh_id: str, terms: list, exclude: Sequence[str] = ()) -> bool:
     """Çalışma hedef hastalığa mı ait? MeSH kodu (ya da üst kodu) tutmalı VE hastalık listesinden biri ya da başlık
-    hastalığı adlandırmalı. Kod yoksa yalnızca ad. Terim listesi boşsa ad koşulu aranmaz."""
+    hastalığı adlandırmalı. Kod yoksa yalnızca ad. Terim listesi boşsa ad koşulu aranmaz.
+
+    ClinicalTrials.gov'un MeSH ataması eksik olabiliyor ("X-Linked Retinitis Pigmentosa", "Ankylosing Spondylitis
+    (Axial Spondyloarthritis)" gibi listelere kod düşmüyor). Kod tutmasa da çalışmanın HASTALIK LİSTESİNDEKİ bir girdi
+    hastalığı açıkça adlandırıyorsa (başlık yetmez; dışlanan nitelemeler geçerli) çalışma sayılır."""
     code = (mesh_id or "").split(":")[-1].strip().upper()
     mesh = trial.get("condition_mesh")
     if code and mesh and code not in {str(m).upper() for m in mesh}:
-        return False
+        return bool(terms) and any(names_disease(c, terms, exclude) for c in trial.get("conditions") or [])
     if not terms:
         return bool(code and mesh) or not code
     texts = list(trial.get("conditions") or []) + [trial.get("title") or ""]
@@ -208,7 +219,7 @@ def exclusion_reason(trial: dict, terms: Sequence[str] = ()) -> str:
     if DISCONTINUE.search(title):
         return "discontinuation"
     ints = trial.get("interventions") or []
-    if SUPPORT_CONTEXT.search(title) or any(t == "GENETIC" or (t in ("PROCEDURE", "BIOLOGICAL") and SUPPORT_CONTEXT.search(n))
+    if SUPPORT_CONTEXT.search(title) or any((t in ("PROCEDURE", "BIOLOGICAL", "GENETIC") and SUPPORT_CONTEXT.search(n))
                                             for t, n in ints):
         return "support"
     return ""
