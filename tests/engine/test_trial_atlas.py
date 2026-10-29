@@ -122,3 +122,30 @@ def test_stack_combine_model_roundtrip():
     assert np.allclose(m2.predict(f).to_numpy(), m.predict_model(f).to_numpy())
     rrf_model = fusion.StackFusion.from_dict({**d, "combine": "rrf(model, frequency)"})
     assert rrf_model.combine == "rrf"
+
+
+def test_stop_kind_classifies_reasons():
+    def k(status, why):
+        return atlas_build.stop_kind({"status": status, "why_stopped": why})
+    assert k("TERMINATED", "Futility analysis at interim") == "efficacy"
+    assert k("TERMINATED", "Lack of efficacy") == "efficacy"
+    assert k("TERMINATED", "The study did not meet its primary endpoint") == "efficacy"
+    assert k("SUSPENDED", "Safety concerns; futility") == "efficacy"       # etkisizlik önce
+    assert k("TERMINATED", "Unexpected adverse events") == "safety"
+    assert k("TERMINATED", "Could not reach the enrollment target") is None  # hasta bulunamaması başarısızlık değil
+    assert k("TERMINATED", "Sponsor business decision (pharmaceutical portfolio)") is None
+    assert k("WITHDRAWN", "Lack of efficacy in another trial") is None      # hiç başlamamış
+    assert k("COMPLETED", "") is None
+
+
+def test_failed_trials_time_sliced(tmp_path):
+    t1 = {**_t("F1", 2006, ["Gammastat"], [("D2", "Disease two")]), "status": "TERMINATED",
+          "why_stopped": "Stopped for futility", "completion_date": "2009-03"}
+    t2 = {**_t("F2", 2006, ["Epsilone"], [("D3", "Disease three")]), "status": "TERMINATED",
+          "why_stopped": "Low enrollment", "completion_date": "2007"}
+    atlas = atlas_build.build(TRIALS + [t1, t2], DRUGS, 1.0, out=tmp_path / "a.json.gz")
+    assert atlas["failed"]["efficacy"] == {"D2": {"C_C": 2009}}            # yıl = sonlandırma yılı
+    assert atlas["failed"]["safety"] == {}
+    at = trial_atlas.TrialAtlas(atlas)
+    assert at.failed_before(2008) == {}
+    assert at.failed_before(2009) == {"C_C": {"D2"}}

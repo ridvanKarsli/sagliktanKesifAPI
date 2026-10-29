@@ -12,7 +12,10 @@ Dosyalar (config.DATA_DIR altında):
     trials_raw/download_state.json          kaldığı yerden sürdürme durumu
     trials/atlas.json.gz                    derlenmiş atlas (paylaşılan kapsam: veritabanında saklanır)
 
-Atlas biçimi: {"schema", "built_at", "n_trials", "names": {MeSH: ad}, "first_year": {MeSH: {chembl_id: yıl}}}
+Atlas biçimi: {"schema", "built_at", "n_trials", "names": {MeSH: ad}, "first_year": {MeSH: {chembl_id: yıl}},
+              "failed": {"efficacy"|"safety": {MeSH: {chembl_id: ilk sonlandırma yılı}}}}
+"failed": etkisizlik ya da güvenlik nedeniyle erken sonlandırılan (TERMINATED/SUSPENDED) çalışmalar; yıl, sonlandırma
+(bitiş) tarihidir, böylece başarısızlık bilgisi de kesite göre dilimlenir.
 Hastalık anahtarı çalışmaya ClinicalTrials.gov'un atadığı DOĞRUDAN MeSH kodlarıdır (üst kodlar değil: "Eklem
 hastalıkları" gibi geniş üst terimler her eklem hastalığına komşu görünür ve benzerliği anlamsızlaştırır).
 """
@@ -32,9 +35,11 @@ from kesif_engine.sources.clinicaltrials import CT_URL, _json, parse_trials
 
 log = logging.getLogger(__name__)
 
-SCHEMA = 2  # 2: her ilk yıl için o yılı belirleyen çalışmanın NCT kimliği (first_nct; kanıt zinciri için)
+SCHEMA = 3  # 2: ilk yılı belirleyen çalışmanın NCT kimliği (first_nct); 3: erken sonlandırılan çalışmalar (failed)
 FIELDS = ("protocolSection.identificationModule,protocolSection.statusModule.startDateStruct,"
           "protocolSection.statusModule.studyFirstSubmitDate,protocolSection.statusModule.studyFirstPostDateStruct,"
+          "protocolSection.statusModule.overallStatus,protocolSection.statusModule.whyStopped,"
+          "protocolSection.statusModule.completionDateStruct,"
           "protocolSection.designModule,"
           "protocolSection.armsInterventionsModule,protocolSection.conditionsModule,"
           "protocolSection.eligibilityModule.healthyVolunteers,derivedSection.conditionBrowseModule")
@@ -64,7 +69,8 @@ def atlas_path() -> Path:
 def _compact(t: dict) -> dict:
     """Atlas için gereken alanlar (ham dosyayı küçük tutmak için)."""
     keep = ("nct", "title", "start_year", "study_type", "purpose", "phases", "interventions", "experimental", "arms",
-            "conditions", "condition_mesh", "condition_mesh_direct", "healthy_volunteers", "first_submitted", "first_posted", "start_date")
+            "conditions", "condition_mesh", "condition_mesh_direct", "healthy_volunteers", "first_submitted", "first_posted", "start_date",
+            "status", "why_stopped", "completion_date")
     return {k: t.get(k) for k in keep}
 
 
@@ -80,6 +86,19 @@ def _dates(payload: dict) -> Dict[str, Tuple[str, str, str]]:
         nct = (ps.get("identificationModule") or {}).get("nctId", "")
         out[nct] = (str(sm.get("studyFirstSubmitDate") or ""), str((sm.get("studyFirstPostDateStruct") or {}).get("date") or ""),
                     str((sm.get("startDateStruct") or {}).get("date") or ""))
+    return out
+
+
+def _status(payload: dict) -> Dict[str, Tuple[str, str, str]]:
+    """nct → (genel durum, durdurma gerekçesi, bitiş/sonlandırma tarihi). Sonlandırılan çalışmanın bitiş tarihi
+    sonlandırma tarihidir; başarısızlık bilgisi kesit dilimlemesinde bu tarihe göre kullanılır."""
+    out = {}
+    for st in payload.get("studies", []):
+        ps = st.get("protocolSection") or {}
+        sm = ps.get("statusModule") or {}
+        nct = (ps.get("identificationModule") or {}).get("nctId", "")
+        out[nct] = (str(sm.get("overallStatus") or ""), str(sm.get("whyStopped") or ""),
+                    str((sm.get("completionDateStruct") or {}).get("date") or ""))
     return out
 
 
@@ -134,9 +153,11 @@ def download(client: Optional[HttpClient] = None, progress: Optional[Callable[[s
             data = data or {}
             direct = _direct_mesh(data)
             dates = _dates(data)
+            status = _status(data)
             for t in parse_trials(data):
                 t["condition_mesh_direct"] = direct.get(t["nct"], [])
                 t["first_submitted"], t["first_posted"], t["start_date"] = dates.get(t["nct"], ("", "", ""))
+                t["status"], t["why_stopped"], t["completion_date"] = status.get(t["nct"], ("", "", ""))
                 fh.write(json.dumps(_compact(t), ensure_ascii=False) + "\n")
                 state["n"] += 1
             state["pages"] += 1
@@ -173,12 +194,23 @@ class TrialAtlas:
         self.first_year: Dict[str, Dict[str, int]] = atlas.get("first_year") or {}
         self.names: Dict[str, str] = atlas.get("names") or {}
         self.first_nct: Dict[str, Dict[str, str]] = atlas.get("first_nct") or {}
+        # {gerekçe türü: {MeSH: {chembl_id: ilk sonlandırma yılı}}}; şema < 3 ise boş
+        self.failed: Dict[str, Dict[str, Dict[str, int]]] = atlas.get("failed") or {}
         self.meta = {k: atlas.get(k) for k in ("schema", "built_at", "n_trials")}
         self._cache: Dict[int, Dict[str, Set[str]]] = {}
 
     def source(self, code: str, chembl_id: str) -> Tuple[Optional[int], str]:
         """(ilk yıl, o yılın NCT kimliği) — kanıt zinciri için; atlas şema 1 ise NCT boş."""
         return self.first_year.get(code, {}).get(chembl_id), self.first_nct.get(code, {}).get(chembl_id, "")
+
+    def failed_before(self, cutoff: int, kind: str = "efficacy") -> Dict[str, Set[str]]:
+        """{chembl_id: kesit yılına kadar bu gerekçeyle erken sonlandırılan çalışmalarının hastalıkları (MeSH)}."""
+        out: Dict[str, Set[str]] = {}
+        for code, row in (self.failed.get(kind) or {}).items():
+            for c, y in row.items():
+                if y <= cutoff:
+                    out.setdefault(c, set()).add(code)
+        return out
 
     def tried_before(self, cutoff: int) -> Dict[str, Set[str]]:
         """{MeSH: kesit yılı dahil o yıla kadar denenmiş ilaçlar}; yalnız MIN_DRUGS ve üstü."""

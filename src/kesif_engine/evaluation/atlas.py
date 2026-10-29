@@ -10,6 +10,7 @@ import datetime
 import gzip
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Optional
 
@@ -21,6 +22,30 @@ from kesif_engine.sources.clinicaltrials import trial_counts
 from kesif_engine.sources.trial_atlas import SCHEMA, atlas_path
 
 log = logging.getLogger(__name__)
+
+STOPPED = {"TERMINATED", "SUSPENDED"}  # WITHDRAWN: hiç hasta alınmadan geri çekilmiş; sonuç bilgisi taşımaz
+STOP_EFFICACY = re.compile(
+    r"futil|lack of (?:clinical )?(?:efficacy|effect|benefit|response|activity)|"
+    r"(?:insufficient|inadequate|limited|no|poor|low) (?:clinical )?(?:efficacy|effect|benefit|activity)\b|"
+    r"not (?:effective|efficacious)|ineffective|"
+    r"(?:did not|didn't|failed to|unlikely to|not likely to|would not|could not|unable to) (?:meet|show|demonstrate|achieve|reach)"
+    r" (?:its |the |a |any )?(?:primary |pre-?specified |main )?(?:end ?points?|efficacy|outcomes?|objectives?|benefit|significan)|"
+    r"(?:primary )?(?:end ?point|outcome)s? (?:was |were )?not (?:met|reached|achieved)|negative (?:results?|outcomes?|data|findings)",
+    re.I)
+STOP_SAFETY = re.compile(r"safety|adverse|toxicit|side[ -]effects?|tolerab|\bharm", re.I)
+
+
+def stop_kind(trial: dict) -> Optional[str]:
+    """Erken sonlandırılan çalışmanın gerekçe türü: 'efficacy' (etkisizlik/futility), 'safety' ya da None (iş kararı,
+    hasta bulunamaması, finansman, gerekçe yok...). Etkisizlik önce bakılır: "futility and safety" etkisizliktir."""
+    if str(trial.get("status") or "").upper() not in STOPPED:
+        return None
+    why = trial.get("why_stopped") or ""
+    if STOP_EFFICACY.search(why):
+        return "efficacy"
+    if STOP_SAFETY.search(why):
+        return "safety"
+    return None
 
 
 def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[Path] = None,
@@ -37,6 +62,7 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
     first: Dict[str, Dict[str, int]] = {}
     first_nct: Dict[str, Dict[str, str]] = {}
     names: Dict[str, str] = {}
+    failed: Dict[str, Dict[str, Dict[str, int]]] = {"efficacy": {}, "safety": {}}
     stats = {"total": 0, "used": 0, "no_year": 0, "not_treatment": 0, "too_many_conditions": 0, "no_mesh": 0,
              "no_drug": 0}
     for t in trials:
@@ -66,6 +92,15 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
             stats["no_drug"] += 1
             continue
         stats["used"] += 1
+        kind = stop_kind(t)
+        if kind:
+            stats[f"failed_{kind}"] = stats.get(f"failed_{kind}", 0) + 1
+            cy = str(t.get("completion_date") or "")[:4]
+            fy = int(cy) if cy.isdigit() else y
+            for code, _ in mesh:
+                row = failed[kind].setdefault(code, {})
+                for cid in hits:
+                    row[cid] = min(row.get(cid, 9999), max(fy, y))
         for code, term in mesh:
             names.setdefault(code, term)
             row = first.setdefault(code, {})
@@ -76,7 +111,8 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
     if stats["total"] == 0 or stats["used"] == 0:
         raise RuntimeError("Ham çalışma dosyası boş ya da kullanılamaz; atlas değiştirilmedi. Önce yeniden indirin (kesif atlas --restart).")
     atlas = {"schema": SCHEMA, "built_at": datetime.datetime.now().isoformat(timespec="seconds"),
-             "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first, "first_nct": first_nct}
+             "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first, "first_nct": first_nct,
+             "failed": failed}
     out = out or atlas_path()
     with gzip.open(out, "wt", encoding="utf-8") as fh:
         json.dump(atlas, fh, ensure_ascii=False)
