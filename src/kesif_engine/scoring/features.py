@@ -34,6 +34,7 @@ zaten denenmiş ilaçları kodlar (cevabı önceden görmek olur), ikincisi lite
 from __future__ import annotations
 
 import datetime
+import json
 import math
 from collections import defaultdict
 from typing import Dict, Iterable, Optional
@@ -208,7 +209,39 @@ def annotate_external(ranked: pd.DataFrame, drugs: Optional[dict], drug_map: Opt
     out["genetic_target"] = g_col
     out["network_target"] = n_col
     out["similar_from"] = _neighbor_reasons(out, drug_map, external)
+    out["stopped_trials"] = _stopped_trials(out, drug_map, external)
     return out
+
+
+STOP_TOP = 5
+
+
+def _stopped_trials(ranked: pd.DataFrame, drug_map: dict, external: dict) -> list:
+    """Uyarı (puanı değiştirmez): ilacın etkisizlik ya da güvenlik nedeniyle erken sonlandırılan çalışmaları. Bu hastalığın
+    kendisi ve benzer hastalıklar önce, sonra yeniden eskiye; en fazla STOP_TOP kayıt, JSON metni.
+    Ölçüm: bu bilgi "5 yılda klinik çalışmaya girer mi" sıralamasını iyileştirmedi (başarısız olan ilaçlar çok denenen,
+    etkin araştırılan ilaçlardır); bu yüzden kanal değil, okuyucuya uyarıdır."""
+    atlas = external.get("atlas")
+    if atlas is None or not len(ranked) or not getattr(atlas, "failed", None):
+        return [""] * len(ranked)
+    _, used = atlas.neighbor_scores(external.get("atlas_own") or {}, external.get("atlas_codes") or [], cutoff=None,
+                                    canonical=external.get("atlas_canonical"))
+    sim = {u["mesh"]: u["similarity"] for u in used}
+    own = {str(c).split(":")[-1].upper() for c in external.get("atlas_codes") or [] if c}
+    canonical = external.get("atlas_canonical") or {}
+    col = []
+    for cid in ranked["chemical_id"]:
+        k = drug_map.get(cid, cid)
+        k = canonical.get(k, k)
+        rows = atlas.stopped(k)
+        if not rows:
+            col.append("")
+            continue
+        rows = sorted(rows, key=lambda r: (r[1].upper() not in own, -sim.get(r[1], 0.0), -r[2]))[:STOP_TOP]
+        col.append(json.dumps([{"tur": kind, "mesh": code, "hastalik": atlas.names.get(code, code), "yil": y, "nct": nct,
+                                "ayni": code.upper() in own, "benzerlik": sim.get(code)} for kind, code, y, nct in rows],
+                              ensure_ascii=False, separators=(",", ":")))
+    return col
 
 
 def _neighbor_reasons(ranked: pd.DataFrame, drug_map: dict, external: dict, top: int = 3) -> list:

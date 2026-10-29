@@ -13,7 +13,8 @@ Dosyalar (config.DATA_DIR altında):
     trials/atlas.json.gz                    derlenmiş atlas (paylaşılan kapsam: veritabanında saklanır)
 
 Atlas biçimi: {"schema", "built_at", "n_trials", "names": {MeSH: ad}, "first_year": {MeSH: {chembl_id: yıl}},
-              "failed": {"efficacy"|"safety": {MeSH: {chembl_id: ilk sonlandırma yılı}}}}
+              "failed": {"efficacy"|"safety": {MeSH: {chembl_id: ilk sonlandırma yılı}}},
+              "failed_nct": aynı biçimde o yılın NCT kimliği}
 "failed": etkisizlik ya da güvenlik nedeniyle erken sonlandırılan (TERMINATED/SUSPENDED) çalışmalar; yıl, sonlandırma
 (bitiş) tarihidir, böylece başarısızlık bilgisi de kesite göre dilimlenir.
 Hastalık anahtarı çalışmaya ClinicalTrials.gov'un atadığı DOĞRUDAN MeSH kodlarıdır (üst kodlar değil: "Eklem
@@ -196,6 +197,8 @@ class TrialAtlas:
         self.first_nct: Dict[str, Dict[str, str]] = atlas.get("first_nct") or {}
         # {gerekçe türü: {MeSH: {chembl_id: ilk sonlandırma yılı}}}; şema < 3 ise boş
         self.failed: Dict[str, Dict[str, Dict[str, int]]] = atlas.get("failed") or {}
+        self.failed_nct: Dict[str, Dict[str, Dict[str, str]]] = atlas.get("failed_nct") or {}
+        self._stopped_index: Optional[Dict[str, List[Tuple[str, str, int, str]]]] = None
         self.meta = {k: atlas.get(k) for k in ("schema", "built_at", "n_trials")}
         self._cache: Dict[int, Dict[str, Set[str]]] = {}
 
@@ -211,6 +214,19 @@ class TrialAtlas:
                 if y <= cutoff:
                     out.setdefault(c, set()).add(code)
         return out
+
+    def stopped(self, chembl_id: str) -> List[Tuple[str, str, int, str]]:
+        """İlacın erken sonlandırılan çalışmaları: [(gerekçe türü, MeSH, yıl, NCT)], yeniden eskiye."""
+        if self._stopped_index is None:
+            idx: Dict[str, List[Tuple[str, str, int, str]]] = {}
+            for kind, by_code in self.failed.items():
+                for code, row in by_code.items():
+                    for c, y in row.items():
+                        idx.setdefault(c, []).append((kind, code, y, self.failed_nct.get(kind, {}).get(code, {}).get(c, "")))
+            for v in idx.values():
+                v.sort(key=lambda x: (-x[2], x[0], x[1]))
+            self._stopped_index = idx
+        return self._stopped_index.get(chembl_id, [])
 
     def tried_before(self, cutoff: int) -> Dict[str, Set[str]]:
         """{MeSH: kesit yılı dahil o yıla kadar denenmiş ilaçlar}; yalnız MIN_DRUGS ve üstü."""

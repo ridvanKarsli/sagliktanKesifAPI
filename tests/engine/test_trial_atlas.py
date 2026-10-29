@@ -149,3 +149,26 @@ def test_failed_trials_time_sliced(tmp_path):
     at = trial_atlas.TrialAtlas(atlas)
     assert at.failed_before(2008) == {}
     assert at.failed_before(2009) == {"C_C": {"D2"}}
+
+
+def test_stopped_trials_warning_column(tmp_path):
+    import pandas as pd
+
+    from kesif_engine.insights import explain
+    from kesif_engine.scoring import features
+
+    t1 = {**_t("F1", 2006, ["Gammastat"], [("D2", "Disease two")]), "status": "TERMINATED",
+          "why_stopped": "Lack of efficacy", "completion_date": "2009"}
+    t2 = {**_t("F2", 2007, ["Gammastat"], [("D3", "Disease three")]), "status": "SUSPENDED",
+          "why_stopped": "Hepatotoxicity", "completion_date": "2010"}
+    at = trial_atlas.TrialAtlas(atlas_build.build(TRIALS + [t1, t2], DRUGS, 1.0, out=tmp_path / "a.json.gz"))
+    assert [r[:3] for r in at.stopped("C_C")] == [("safety", "D3", 2010), ("efficacy", "D2", 2009)]
+    ext = {"atlas": at, "atlas_own": {"C_A": 2005, "C_B": 2006}, "atlas_codes": ["MESH:D1"], "atlas_canonical": {}}
+    ranked = pd.DataFrame({"chemical_id": ["C_C", "C_A"]})
+    col = features._stopped_trials(ranked, {}, ext)
+    items = json.loads(col[0])
+    assert col[1] == ""
+    assert items[0]["mesh"] == "D2" and items[0]["nct"] == "F1" and items[0]["benzerlik"]   # benzer hastalık önce
+    step = explain.stopped_step({"stopped_trials": col[0]})
+    assert step["tur"] == "uyarı" and {k["id"] for k in step["kaynaklar"]} == {"F1", "F2"}
+    assert explain.stopped_step({"stopped_trials": ""}) is None

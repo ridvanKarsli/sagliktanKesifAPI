@@ -21,6 +21,8 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
+from kesif_engine.insights import explain
+
 TR_DIR = {"up": "artmış", "down": "azalmış", "mutated": "yalnızca ilişki raporu var, yön verisi yok", "unknown": "yönü bilinmiyor"}
 TR_EFF = {"inhibit": "baskılıyor", "activate": "artırıyor", "unknown": "etkisi bilinmiyor"}
 TR_CONS = {"consistent": "tutarlı", "opposite": "ters", "unknown": "bilinmiyor"}
@@ -84,6 +86,9 @@ def justify(row: Dict[str, Any], links: list, disease_label: str) -> str:
         names = [x.rsplit(" ", 1)[0] for x in sf.split("; ")]
         parts.append(f"Benzer hastalıklarda daha önce klinik çalışmaya girmiş: {', '.join(names)} "
                      "(benzerlik, iki hastalıkta denenmiş ilaçların örtüşmesinden).")
+    st = explain.stopped_step(row)
+    if st:
+        parts.append("Dikkat: " + st["metin"])
     harm = row.get("harm_signal") or "yok"
     if harm == "yok":
         parts.append("Hastalıkla doğrudan ilişki raporu yok; güvenlik sinyali değerlendirilemedi.")
@@ -162,6 +167,7 @@ def build_summary(results_dir: Path, data_dir: Path, disease_cfg: dict, top_new:
             "genetic_target": r.get("genetic_target") if isinstance(r.get("genetic_target"), str) else "",
             "network_target": r.get("network_target") if isinstance(r.get("network_target"), str) else "",
             "similar_from": r.get("similar_from") if isinstance(r.get("similar_from"), str) else "",
+            "stopped_trials": r.get("stopped_trials") if isinstance(r.get("stopped_trials"), str) else "",
             "p_trial_5y": None if _nan(r.get("p_trial_5y")) else float(r["p_trial_5y"]),
             "justification": justify(r.to_dict(), links, disease_cfg.get("label", "hastalık")),
         })

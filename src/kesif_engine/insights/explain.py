@@ -11,6 +11,7 @@ Her aday için iki parça üretilir:
                 mekanizma          ilaç veritabanında ilacın bu gen üzerindeki etkisi
                 benzer hastalık    ilacın denendiği, bu hastalığa en benzer hastalıklar: yıl ve NCT kimliği
                 bağımsız kanıt     hedef genin genetik ilişkisi, protein ağında hastalık genlerine yakınlık
+                uyarı              etkisizlik / güvenlik nedeniyle erken sonlandırılan çalışmalar (NCT kimlikleriyle)
 
 Puanı değiştirmez; yalnız açıklar. Aynı veri aynı zinciri verir (belirlenimci).
 """
@@ -131,6 +132,31 @@ def _independent_steps(row: dict) -> List[dict]:
     return steps
 
 
+STOP_NAMES = {"efficacy": "etkisizlik", "safety": "güvenlik"}
+
+
+def stopped_step(row: dict) -> Optional[dict]:
+    """Erken sonlandırılan çalışmalar zincirde son adım olarak uyarıdır (sıralamaya etkisi yok)."""
+    raw = row.get("stopped_trials")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        items = json.loads(raw)
+    except ValueError:
+        return None
+    if not items:
+        return None
+    parts = []
+    for it in items:
+        where = "bu hastalıkta" if it.get("ayni") else (it.get("hastalik") or it.get("mesh"))
+        if it.get("benzerlik") and not it.get("ayni"):
+            where += " (benzer hastalık)"
+        parts.append(f"{where}, {it.get('yil')}: {STOP_NAMES.get(it.get('tur'), it.get('tur'))}")
+    return {"tur": "uyarı", "metin": "Erken sonlandırılan çalışmalar: " + "; ".join(parts)
+            + ". Ölçümlerimizde bu bilgi klinik çalışmaya girmeyi öngörmedi; ancak etkinlik açısından dikkate alınmalı.",
+            "kaynaklar": [{"tip": "nct", "id": it["nct"]} for it in items if it.get("nct")]}
+
+
 def build(ranked: pd.DataFrame, features: pd.DataFrame, decision: dict, evidence: Dict[str, List[dict]], external: dict,
           drug_map: dict, disease_label: str, top: int = 100, use_dict: bool = True) -> Dict[str, dict]:
     """{chemical_id: {"katkilar": [...], "adimlar": [...]}} sıralamanın ilk `top` adayı için."""
@@ -147,6 +173,9 @@ def build(ranked: pd.DataFrame, features: pd.DataFrame, decision: dict, evidence
         if nb:
             steps.insert(0 if (len(contrib) and key in contrib.index and contrib.loc[key].get("similar", 0) > 0) else len(steps), nb)
         steps += _independent_steps(row)
+        st = stopped_step(row)
+        if st:
+            steps.append(st)
         out[cid] = {"katkilar": _shares(contrib.loc[key]) if len(contrib) and key in contrib.index else [],
                     "adimlar": steps}
     return out

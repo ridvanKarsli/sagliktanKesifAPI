@@ -63,6 +63,7 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
     first_nct: Dict[str, Dict[str, str]] = {}
     names: Dict[str, str] = {}
     failed: Dict[str, Dict[str, Dict[str, int]]] = {"efficacy": {}, "safety": {}}
+    failed_nct: Dict[str, Dict[str, Dict[str, str]]] = {"efficacy": {}, "safety": {}}
     stats = {"total": 0, "used": 0, "no_year": 0, "not_treatment": 0, "too_many_conditions": 0, "no_mesh": 0,
              "no_drug": 0}
     for t in trials:
@@ -100,7 +101,10 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
             for code, _ in mesh:
                 row = failed[kind].setdefault(code, {})
                 for cid in hits:
-                    row[cid] = min(row.get(cid, 9999), max(fy, y))
+                    yy = max(fy, y)
+                    if yy < row.get(cid, 9999):
+                        row[cid] = yy
+                        failed_nct[kind].setdefault(code, {})[cid] = t.get("nct") or ""
         for code, term in mesh:
             names.setdefault(code, term)
             row = first.setdefault(code, {})
@@ -112,7 +116,7 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
         raise RuntimeError("Ham çalışma dosyası boş ya da kullanılamaz; atlas değiştirilmedi. Önce yeniden indirin (kesif atlas --restart).")
     atlas = {"schema": SCHEMA, "built_at": datetime.datetime.now().isoformat(timespec="seconds"),
              "n_trials": stats["used"], "stats": stats, "names": names, "first_year": first, "first_nct": first_nct,
-             "failed": failed}
+             "failed": failed, "failed_nct": failed_nct}
     out = out or atlas_path()
     with gzip.open(out, "wt", encoding="utf-8") as fh:
         json.dump(atlas, fh, ensure_ascii=False)
