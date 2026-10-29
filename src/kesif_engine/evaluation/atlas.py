@@ -117,5 +117,6 @@ def build(trials: Iterable[dict], drugs: list, min_phase: float, out: Optional[P
     with gzip.open(out, "wt", encoding="utf-8") as fh:
         json.dump(atlas, fh, ensure_ascii=False)
     say(f"Atlas: {len(first):,} hastalık (MeSH), {stats['used']:,} çalışma kullanıldı; elenenler: "
-        + ", ".join(f"{k} {v:,}" for k, v in stats.items() if k not in ("total", "used") and v))
+        + ", ".join(f"{k} {v:,}" for k, v in stats.items() if k not in ("total", "used") and not k.startswith("failed_") and v)
+        + f"; erken sonlandırılan (kullanılanlar içinde): etkisizlik {stats.get('failed_efficacy', 0):,}, güvenlik {stats.get('failed_safety', 0):,}")
     return atlas
