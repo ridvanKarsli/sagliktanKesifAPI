@@ -168,7 +168,8 @@ def test_stopped_trials_warning_column(tmp_path):
     col = features._stopped_trials(ranked, {}, ext)
     items = json.loads(col[0])
     assert col[1] == ""
-    assert items[0]["mesh"] == "D2" and items[0]["nct"] == "F1" and items[0]["benzerlik"]   # benzer hastalık önce
+    assert items[0]["nct"] == "F1" and items[0]["benzerlik"]
+    assert [i["mesh"] for i in items] == ["D2"]          # D3 bu hastalığa benzemiyor: gösterilmez
     step = explain.stopped_step({"stopped_trials": col[0]})
-    assert step["tur"] == "uyarı" and {k["id"] for k in step["kaynaklar"]} == {"F1", "F2"}
+    assert step["tur"] == "uyarı" and {k["id"] for k in step["kaynaklar"]} == {"F1"}
     assert explain.stopped_step({"stopped_trials": ""}) is None

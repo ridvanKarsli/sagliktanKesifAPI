@@ -217,8 +217,11 @@ STOP_TOP = 5
 
 
 def _stopped_trials(ranked: pd.DataFrame, drug_map: dict, external: dict) -> list:
-    """Uyarı (puanı değiştirmez): ilacın etkisizlik ya da güvenlik nedeniyle erken sonlandırılan çalışmaları. Bu hastalığın
-    kendisi ve benzer hastalıklar önce, sonra yeniden eskiye; en fazla STOP_TOP kayıt, JSON metni.
+    """Uyarı (puanı değiştirmez): ilacın etkisizlik ya da güvenlik nedeniyle erken sonlandırılan çalışmaları; yalnız bu
+    hastalığın kendisi ve en benzer hastalıklarda (komşu kanalının ilk 10 komşusu). Alakasız hastalıklardaki durdurmalar
+    gösterilmez: ilk 50 adayın %57'sinde bir kayıt çıkıyordu (çoğu kanser ya da çocuk çalışmaları), uyarı anlamını
+    yitiriyordu; benzer hastalıkla sınırlayınca ~%9. Bu hastalık önce, sonra benzerlik, sonra yeniden eskiye; en fazla
+    STOP_TOP kayıt, JSON metni.
     Ölçüm: bu bilgi "5 yılda klinik çalışmaya girer mi" sıralamasını iyileştirmedi (başarısız olan ilaçlar çok denenen,
     etkin araştırılan ilaçlardır); bu yüzden kanal değil, okuyucuya uyarıdır."""
     atlas = external.get("atlas")
@@ -233,7 +236,7 @@ def _stopped_trials(ranked: pd.DataFrame, drug_map: dict, external: dict) -> lis
     for cid in ranked["chemical_id"]:
         k = drug_map.get(cid, cid)
         k = canonical.get(k, k)
-        rows = atlas.stopped(k)
+        rows = [r for r in atlas.stopped(k) if r[1].upper() in own or r[1] in sim]
         if not rows:
             col.append("")
             continue
