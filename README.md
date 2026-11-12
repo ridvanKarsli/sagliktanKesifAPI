@@ -40,6 +40,10 @@ Arayüz ayrı bir repodadır (Sağlıktan Keşif — Frontend) ve bu API'ye yaln
 
 Benzerlik kanalı ve atlas tamamen zaman dilimlidir: benzerlik de yalnız kesitten önceki klinik çalışmalardan hesaplanır.
 
+Kanalların birleştirme ağırlıkları ve olasılık kalibrasyonu ölçülmüş hâliyle pakettedir
+(`resources/fusion_default.json`); yeni bir kurulum hiç ölçüm yapmadan aynı modeli kullanır. `kesif benchmark`
+çalıştırılırsa kurulum kendi ölçümünü kullanmaya başlar.
+
 ### Güncel ölçüm sonuçları
 
 | Test | Sonuç |
@@ -76,7 +80,13 @@ kesif api --reload                       # http://127.0.0.1:8000/api/v1/docs
 Arayüz için frontend reposunda `npm run dev` (ayrı terminalde). İlk giriş: `.env` içindeki
 `KESIF_BOOTSTRAP_ADMIN_EMAIL` / `KESIF_BOOTSTRAP_ADMIN_PASSWORD`.
 
-Bir hastalığı uçtan uca analiz etmek (kuyruk ve sunucu gerekmez):
+İlk kurulumda bir kez (yaklaşık 5 dakika; "benzer hastalıklarda denenmiş" kanalı için gerekli):
+
+```bash
+kesif atlas                              # ClinicalTrials.gov'u indirir, klinik çalışma atlasını derler
+```
+
+Hastalıklar arayüzden eklenip analiz edilebilir. Komut satırından uçtan uca analiz (kuyruk ve sunucu gerekmez):
 
 ```bash
 kesif run behcet                         # veri toplama → etiketler → kanıt → sıralama → doğrulama → rapor
